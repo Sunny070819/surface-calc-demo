@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: surface-calc-demo
+    runtime: python
+    plan: free
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SAP_ICF_URL
+        sync: false
+      - key: SAP_ICF_USERNAME
+        sync: false
+      - key: SAP_ICF_PASSWORD
+        sync: false
+      - key: SAP_ICF_VERIFY_SSL
+        value: "false"

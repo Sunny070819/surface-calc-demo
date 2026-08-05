@@ -66,6 +66,59 @@ def test_evaluate_design_leftover_below_threshold(monkeypatch):
     assert result["qualifies"] is False
 
 
+def test_evaluate_design_includes_mixed_nesting_entry(monkeypatch):
+    monkeypatch.setattr(config, "AREA_DISCARD_THRESHOLD_CM2", 300.0)
+    # 40x30 sheet, product is the sheet minus its top-right 29x20 corner ->
+    # exactly 1 copy fits (bbox == sheet), leaving that 29x20 corner as
+    # leftover. On a plain 29x20 rectangle the mixed shelf-packer fits both
+    # products (fits_a=2, fits_b=4, benefit=80) -- see the equivalent direct
+    # nesting.greedy_mixed_nesting test for the row-by-row derivation.
+    product = Polygon([(0, 0), (40, 0), (40, 10), (11, 10), (11, 30), (0, 30)])
+    result = qualification.evaluate_design(product, sheet_length_cm=40, sheet_width_cm=30)
+
+    assert result["nesting"]["A+B"] == {
+        "fits_a": 2,
+        "fits_b": 4,
+        "benefit": 80.0,
+        "unit_price_a": 10.0,
+        "unit_price_b": 15.0,
+    }
+
+    ranked_ids = [option["product_id"] for option in result["ranked_options"]]
+    assert "A+B" in ranked_ids
+    mixed_option = next(o for o in result["ranked_options"] if o["product_id"] == "A+B")
+    assert mixed_option["benefit"] == 80.0
+    # A alone (benefit 120) beats the mixed layout (80) beats B alone (60) --
+    # confirms "A+B" is folded into the same benefit-ranked order, not just appended.
+    assert ranked_ids == sorted(ranked_ids, key=lambda pid: -next(
+        o["benefit"] for o in result["ranked_options"] if o["product_id"] == pid
+    ))
+    assert ranked_ids[0] == "A"
+
+    # nesting dict key order should follow the same benefit ranking.
+    assert list(result["nesting"].keys()) == ranked_ids
+
+
+def test_evaluate_design_mixed_nesting_too_small_boundary(monkeypatch):
+    monkeypatch.setattr(config, "AREA_DISCARD_THRESHOLD_CM2", 5.0)
+    # L-shaped product (bbox 10x10, real area 75) packed onto a 10x10 sheet:
+    # leftover is the product's own 25cm2 notch -- above the (lowered) area
+    # threshold of 5, but below the smallest standard product's own area
+    # (A is 45cm2), so nothing can possibly fit, mixed or otherwise.
+    l_product = Polygon([(0, 0), (10, 0), (10, 5), (5, 5), (5, 10), (0, 10)])
+    result = qualification.evaluate_design(l_product, sheet_length_cm=10, sheet_width_cm=10)
+
+    assert result["passes_area_threshold"] is True
+    assert result["area_cm2"] == 25.0
+    assert result["nesting"]["A+B"] == {
+        "fits_a": 0,
+        "fits_b": 0,
+        "benefit": 0.0,
+        "unit_price_a": 10.0,
+        "unit_price_b": 15.0,
+    }
+
+
 def test_evaluate_design_leftover_reflects_product_notch(monkeypatch):
     monkeypatch.setattr(config, "AREA_DISCARD_THRESHOLD_CM2", 5.0)
     # L-shaped product (bbox 10x10, real area 75, missing its own top-right

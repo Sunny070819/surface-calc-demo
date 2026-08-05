@@ -4,6 +4,8 @@ Re-reads the JSON file on every call rather than caching in memory. At POC scale
 (a handful of products) this is negligible overhead, and it means an operator can
 edit standard_products.json and see the change on the very next request with no
 server restart -- important since the real A/B numbers aren't known yet.
+The `unit_price` values are placeholder demo values until 台芯實業 provides the
+actual pricing data.
 """
 
 import json

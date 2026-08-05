@@ -16,7 +16,8 @@ import config
 HEADERS = [
     "餘料編號", "原始設計圖來源/批次", "原始檔名", "來源類型", "輪廓判定方式",
     "總面積(cm²)", "形狀描述/輪廓座標", "可容納A的數量", "可容納B的數量",
-    "其他標準品容納數量(JSON)", "材質", "使用格點大小(cm)", "判定結果", "建檔時間",
+    "其他標準品容納數量(JSON)", "材質", "使用格點大小(cm)", "候選方案(JSON)",
+    "綁定狀態", "判定結果", "建檔時間",
 ]
 
 MAX_POINTS_STORED = 100
@@ -39,6 +40,7 @@ def append_record(
     polygon_cm, length_cm, width_cm, fits_by_product, material,
     grid_cell_size_cm, verdict, path=None,
     sheet_name=None, sheet_area_cm2=None, product_area_cm2=None, product_fit_count=None,
+    candidate_options=None, binding_status="UNBOUND",
 ):
     path = ensure_workbook(path)
     wb = load_workbook(path)
@@ -59,6 +61,15 @@ def append_record(
         "width_cm": width_cm,
         "points": (polygon_cm or [])[:MAX_POINTS_STORED],
     }
+    normalized_candidate_options = [
+        {
+            "product_id": option.get("product_id"),
+            "fits": option.get("fits", 0),
+            "unit_price": option.get("unit_price"),
+            "benefit": option.get("benefit"),
+        }
+        for option in (candidate_options or [])
+    ]
     # Design-to-leftover provenance (see qualification.evaluate_design): what sheet
     # and product area this leftover was computed from, not directly measured from.
     if sheet_name is not None or sheet_area_cm2 is not None or product_area_cm2 is not None:
@@ -80,6 +91,8 @@ def append_record(
         json.dumps(other_fits, ensure_ascii=False),
         material or "",
         grid_cell_size_cm,
+        json.dumps(normalized_candidate_options, ensure_ascii=False),
+        binding_status or "UNBOUND",
         verdict,
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     ]

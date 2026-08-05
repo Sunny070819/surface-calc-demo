@@ -1,3 +1,6 @@
+import logging
+
+import shapely
 from shapely.geometry import Polygon
 
 import nesting
@@ -104,3 +107,58 @@ def test_pack_rect_into_polygon_with_item_polygon_preserves_notch():
     # leftover should be exactly the item's own notch: the top-right 5x5 corner
     expected_notch = Polygon([(5, 5), (10, 5), (10, 10), (5, 10)])
     assert real_result["leftover_polygon"].equals(expected_notch)
+
+
+PRODUCT_A = {"length_cm": 9.0, "width_cm": 5.0, "unit_price": 10.0}
+PRODUCT_B = {"length_cm": 10.0, "width_cm": 10.0, "unit_price": 15.0}
+
+
+def test_greedy_mixed_nesting_fits_both_products():
+    # 29x20: row_height = max(9,5,10,10) = 10 -> 2 rows. Each row: 2 B's (20 of
+    # 29 wide) leave a 9-wide remainder that's exactly one A. B-then-A yields
+    # fits_a=2, fits_b=4 (benefit 80) vs A-then-B's fits_a=6, fits_b=0
+    # (benefit 60) -- B-then-A should win and both products should be present.
+    poly = shapely.box(0, 0, 29, 20)
+    result = nesting.greedy_mixed_nesting(poly, PRODUCT_A, PRODUCT_B)
+    assert result["fits_a"] == 2
+    assert result["fits_b"] == 4
+    assert result["benefit"] == 80.0
+    assert result["strategy"] == "B_then_A"
+
+
+def test_greedy_mixed_nesting_polygon_too_small_returns_zero():
+    # area 9 < min(A area 45, B area 100) -- neither product can possibly fit.
+    tiny = shapely.box(0, 0, 3, 3)
+    result = nesting.greedy_mixed_nesting(tiny, PRODUCT_A, PRODUCT_B)
+    assert result == {"fits_a": 0, "fits_b": 0, "benefit": 0.0, "strategy": "too_small"}
+
+
+def test_greedy_mixed_nesting_drops_rectangles_outside_concave_notch():
+    # 20x20 square missing its top-right 10x10 corner (same L used in
+    # test_concave_l_shape_does_not_cross_the_notch): naive bbox shelf packing
+    # would try to place a row-1 B into the missing corner; covers() must
+    # reject it so it isn't counted.
+    l_shape = Polygon([(0, 0), (20, 0), (20, 10), (10, 10), (10, 20), (0, 20)])
+    result = nesting.greedy_mixed_nesting(l_shape, PRODUCT_A, PRODUCT_B)
+    # bbox is 20x20 -> naive (notch-blind) shelf packing of B alone would
+    # claim floor(20/10)*floor(20/10) = 4; the real L only has room for 3.
+    assert result["fits_b"] <= 3
+    assert result["fits_a"] >= 0 and result["fits_b"] >= 0
+
+
+def test_greedy_mixed_nesting_missing_unit_price_defaults_to_zero_and_logs(caplog):
+    caplog.set_level(logging.WARNING)
+    product_a_no_price = {"length_cm": 9.0, "width_cm": 5.0}
+    poly = shapely.box(0, 0, 29, 20)
+    result = nesting.greedy_mixed_nesting(poly, product_a_no_price, PRODUCT_B)
+    assert result["fits_a"] >= 0  # did not raise
+    assert "unit_price" in caplog.text
+
+
+def test_greedy_mixed_nesting_slow_pass_logs_a_warning(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(nesting, "MIXED_NESTING_SLOW_THRESHOLD_SECONDS", -1)
+    poly = shapely.box(0, 0, 29, 20)
+    result = nesting.greedy_mixed_nesting(poly, PRODUCT_A, PRODUCT_B)
+    assert result["fits_a"] >= 0  # still returns a result, does not raise/timeout
+    assert "took" in caplog.text

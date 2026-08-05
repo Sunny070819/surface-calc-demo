@@ -1,4 +1,4 @@
 [
-  { "id": "A", "name": "小物收納床", "length_cm": 9.0, "width_cm": 5.0, "area_cm2": 45.0 },
-  { "id": "B", "name": "小方塊", "length_cm": 10.0, "width_cm": 10.0, "area_cm2": 100.0 }
+  { "id": "A", "name": "小物收納床", "length_cm": 9.0, "width_cm": 5.0, "area_cm2": 45.0, "unit_price": 10.0, "note": "暫定示意值，待台芯實業提供實際單價後更新" },
+  { "id": "B", "name": "小方塊", "length_cm": 10.0, "width_cm": 10.0, "area_cm2": 100.0, "unit_price": 15.0, "note": "暫定示意值，待台芯實業提供實際單價後更新" }
 ]

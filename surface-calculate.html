@@ -113,6 +113,7 @@
     background:var(--paper); color:var(--ink); padding:9px 10px; border-radius:var(--radius); width:150px;
   }
   select:focus{ outline:2px solid var(--slate); outline-offset:1px; }
+  select:disabled{ opacity:.65; cursor:not-allowed; background:var(--line); }
   .area-readout{ font-family:var(--font-mono); font-size:16px; font-weight:500; color:var(--slate-deep); padding:9px 0; }
 
   footer{ padding:32px 0 60px; font-size:12px; color:var(--ink-faint); font-family:var(--font-mono); }
@@ -187,16 +188,13 @@
       </div>
       <div id="materialRow" class="row" style="display:none; margin-top:14px;">
         <div class="field"><label>材質</label>
-          <select id="materialSelect">
-            <option value="防火">防火</option>
-            <option value="防水">防水</option>
-            <option value="再生紙">再生紙</option>
-          </select>
+          <select id="materialSelect"></select>
         </div>
         <div class="field"><label>成品面積 (cm²)</label><div class="area-readout" id="productAreaReadout">—</div></div>
         <div class="field"><label>原紙板可排入成品數</label><div class="area-readout" id="productFitReadout">—</div></div>
         <div class="field"><label>餘料面積 (cm²)</label><div class="area-readout" id="materialArea">—</div></div>
         <div class="field"><label>A/B 排列判定</label><div class="area-readout" id="nestingReadout" style="font-size:13px;">—</div></div>
+        <div class="field"><label>簡化匯出方案</label><div class="area-readout" id="simplifiedPlanReadout" style="font-size:13px;">—</div></div>
         <button id="stockInBtn">入庫</button>
       </div>
       <p id="backendInfo" style="font-size:12px; color:var(--ink-faint); margin:14px 0 0; font-family:var(--font-mono);"></p>
@@ -211,17 +209,14 @@
 
   <section class="block" style="border-bottom:none;">
     <div class="block-head"><span class="num">02</span><h2>SAP MM 匯出 — 邊角料入庫</h2></div>
-    <p class="block-desc">選擇邊角料材質，確認原紙板規格與成品面積後送出；SAP 端會自動算出餘料面積、完成入庫（MIGO 501）與批次分類，並回傳批次號與儲位分區。</p>
+    <p class="block-desc">選擇邊角料材質，確認原紙板規格與成品面積後送出；SAP 端會自動算出餘料面積、完成入庫（MIGO 531、零成本評價）與批次分類，並回傳批次號與儲位分區。</p>
     <div class="panel">
       <p id="sapExportEmpty" class="empty-note">尚無可匯出的餘料 — 請先完成上方入庫。</p>
       <div id="sapExportForm" class="row" style="display:none;">
-        <div class="field"><label>餘料編號</label><div class="area-readout" id="sapScrapId">—</div></div>
+        <div class="field" style="display:none;"><label>餘料編號</label><div class="area-readout" id="sapScrapId">—</div></div>
         <div class="field"><label>材質（SAP 料號）</label>
-          <select id="sapMatnrSelect">
-            <option value="SCRAP-FR">防火（SCRAP-FR）</option>
-            <option value="SCRAP-WP">防水（SCRAP-WP）</option>
-            <option value="SCRAP-RC">再生紙（SCRAP-RC）</option>
-          </select>
+          <select id="sapMatnrSelect"></select>
+          <div id="sapMatnrWarning" style="display:none; color:var(--danger); font-size:12px; margin-top:6px; max-width:220px;"></div>
         </div>
         <div class="field"><label>原紙板規格</label><div class="area-readout" id="sapBoardReadout">—</div></div>
         <div class="field"><label>成品面積 (cm²)</label><div class="area-readout" id="sapProductAreaReadout">—</div></div>
@@ -241,16 +236,46 @@
   var photoState = { img:null, scaleCmPerPx:null, calibPts:[], tracePts:[], mode:'calib', originalFile:null, contourMethod:null, autoContourPts:null };
   var standardSheets = [];
   var BACKEND_BASE = (location.protocol==='file:') ? 'http://127.0.0.1:5000' : '';
+  // Single source of truth for material <-> SAP matnr: materialSelect and
+  // sapMatnrSelect are both generated from this array (see populateMaterialSelects()),
+  // and MATERIAL_TO_SAP_MATNR is derived from it too, so adding a material only
+  // means editing this one list.
+  var MATERIAL_OPTIONS = [
+    {value:'防火', matnr:'SCRAP-FR'},
+    {value:'防水', matnr:'SCRAP-WP'},
+    {value:'再生紙', matnr:'SCRAP-RC'}
+  ];
+  var MATERIAL_TO_SAP_MATNR = {};
+  MATERIAL_OPTIONS.forEach(function(opt){ MATERIAL_TO_SAP_MATNR[opt.value]=opt.matnr; });
+
+  // Dedicated material -> SAP matnr table for the new simplified export flow
+  // (exportSimplified() / /api/sap/export-simple) -- SCRAP2-* material master,
+  // deliberately kept separate from MATERIAL_OPTIONS/MATERIAL_TO_SAP_MATNR
+  // above (SCRAP-* material master, used by the original delayed-binding flow)
+  // so the two flows' matnr codes can never bleed into each other.
+  var MATERIAL_TO_SAP_MATNR_SIMPLE = { '防火':'SCRAP2-FR', '防水':'SCRAP2-WP', '再生紙':'SCRAP2-RC' };
+
+  function populateMaterialSelects(){
+    var materialSelect=document.getElementById('materialSelect');
+    var sapMatnrSelect=document.getElementById('sapMatnrSelect');
+    materialSelect.innerHTML=MATERIAL_OPTIONS.map(function(opt){
+      return '<option value="'+opt.value+'">'+opt.value+'</option>';
+    }).join('');
+    sapMatnrSelect.innerHTML=MATERIAL_OPTIONS.map(function(opt){
+      return '<option value="'+opt.matnr+'">'+opt.value+'（'+opt.matnr+'）</option>';
+    }).join('');
+  }
 
   function apiUrl(path){ return BACKEND_BASE + path; }
+  var NGROK_SKIP_HEADER = { 'ngrok-skip-browser-warning': 'true' };
 
   function apiPostJson(path, body){
-    return fetch(apiUrl(path), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    return fetch(apiUrl(path), { method:'POST', headers:Object.assign({'Content-Type':'application/json'}, NGROK_SKIP_HEADER), body: JSON.stringify(body) })
       .then(function(res){ return res.json().then(function(data){ return { status:res.status, data:data }; }); });
   }
 
   function apiPostForm(path, formData){
-    return fetch(apiUrl(path), { method:'POST', body: formData })
+    return fetch(apiUrl(path), { method:'POST', headers:NGROK_SKIP_HEADER, body: formData })
       .then(function(res){ return res.json().then(function(data){ return { status:res.status, data:data }; }); });
   }
 
@@ -282,9 +307,9 @@
     var el=document.getElementById('backendInfo');
     if(!el) return;
     Promise.all([
-      fetch(apiUrl('/api/config')).then(function(r){ return r.json(); }),
-      fetch(apiUrl('/api/standard-products')).then(function(r){ return r.json(); }),
-      fetch(apiUrl('/api/standard-sheets')).then(function(r){ return r.json(); })
+      fetch(apiUrl('/api/config'), { headers:NGROK_SKIP_HEADER }).then(function(r){ return r.json(); }),
+      fetch(apiUrl('/api/standard-products'), { headers:NGROK_SKIP_HEADER }).then(function(r){ return r.json(); }),
+      fetch(apiUrl('/api/standard-sheets'), { headers:NGROK_SKIP_HEADER }).then(function(r){ return r.json(); })
     ]).then(function(results){
       var cfg=results[0], products=results[1], sheets=results[2];
       standardSheets=sheets;
@@ -314,14 +339,134 @@
   }
   function randomLocation(){ var rows=['A','B','C','D']; return rows[Math.floor(Math.random()*rows.length)]+'-'+Math.floor(rnd(1,12)); }
 
+  function buildCandidateOptionsFromNesting(nesting){
+    if(!nesting) return [];
+    return Object.keys(nesting).map(function(productId){
+      var entry=nesting[productId]||{};
+      if(productId==='A+B'){
+        return {
+          product_id: 'A+B',
+          fits_a: entry.fits_a != null ? entry.fits_a : 0,
+          fits_b: entry.fits_b != null ? entry.fits_b : 0,
+          unit_price_a: entry.unit_price_a != null ? entry.unit_price_a : null,
+          unit_price_b: entry.unit_price_b != null ? entry.unit_price_b : null,
+          benefit: entry.benefit != null ? entry.benefit : null,
+        };
+      }
+      return {
+        product_id: productId,
+        fits: entry.fits != null ? entry.fits : 0,
+        unit_price: entry.unit_price != null ? entry.unit_price : null,
+        benefit: entry.benefit != null ? entry.benefit : null,
+      };
+    });
+  }
+
+  function formatCandidateOptions(candidateOptions, bindingStatus){
+    var options = Array.isArray(candidateOptions) ? candidateOptions : [];
+    if(!options.length){ return ''; }
+    var parts=options.map(function(option){
+      if(option && option.product_id==='A+B'){
+        var fitsA=option.fits_a != null ? option.fits_a : 0;
+        var fitsB=option.fits_b != null ? option.fits_b : 0;
+        var mixBenefit=option.benefit != null ? option.benefit : null;
+        var mixSuffix = mixBenefit != null ? '($'+mixBenefit+')' : '';
+        return 'A+B(A×'+fitsA+'+B×'+fitsB+')'+mixSuffix;
+      }
+      var productId=option && option.product_id ? option.product_id : '方案';
+      var fits=option && option.fits != null ? option.fits : 0;
+      var unitPrice=(option && option.unit_price != null) ? option.unit_price : null;
+      var benefit=(option && option.benefit != null) ? option.benefit : null;
+      var suffix = benefit != null ? '($'+benefit+')' : (unitPrice != null ? '($'+unitPrice+')' : '');
+      return productId+'×'+fits + suffix;
+    });
+    var statusText = bindingStatus === 'BOUND' ? ' · 已綁定' : ' · 未綁定';
+    return '候選: '+parts.join(' / ')+statusText;
+  }
+
+  function buildNestingReadoutHtml(data){
+    if(!data || !data.nesting){ return '—'; }
+    // A+B 混合排版不在畫面上顯示 -- 過濾掉，只呈現 A / B 各自單獨排版的結果。
+    var entries=Object.keys(data.nesting)
+      .filter(function(id){ return id!=='A+B'; })
+      .map(function(id){ return { id:id, record:data.nesting[id]||{} }; });
+    var hasBenefitData=entries.some(function(entry){ return entry.record && (entry.record.unit_price != null || entry.record.benefit != null); });
+    if(!hasBenefitData){
+      var fitsText=entries.map(function(entry){ return entry.id+': '+entry.record.fits+' 件'; }).join(' / ');
+      var fallbackRows = fitsText ? ['<div style="padding:4px 0;">'+fitsText+'</div>'] : [];
+      return '<div style="display:grid;gap:2px;">'+fallbackRows.join('')+'</div>';
+    }
+
+    var rankedOptions = Array.isArray(data.ranked_options)
+      ? data.ranked_options.filter(function(o){ return o.product_id!=='A+B'; })
+      : null;
+    var rankMap={};
+    if(rankedOptions){ rankedOptions.forEach(function(option, idx){ rankMap[option.product_id]=idx; }); }
+    var orderedEntries=entries.slice().sort(function(a,b){
+      var aRank = rankMap[a.id] != null ? rankMap[a.id] : 9999;
+      var bRank = rankMap[b.id] != null ? rankMap[b.id] : 9999;
+      if(aRank !== bRank) return aRank - bRank;
+      var aBenefit = a.record && a.record.benefit != null ? a.record.benefit : -Infinity;
+      var bBenefit = b.record && b.record.benefit != null ? b.record.benefit : -Infinity;
+      if(aBenefit !== bBenefit) return bBenefit - aBenefit;
+      return a.id.localeCompare(b.id);
+    });
+
+    var rows=orderedEntries.map(function(entry, index){
+      var record=entry.record||{};
+      var highlight = index===0 ? 'background:var(--honeycomb-tint);' : '';
+      var fits=record.fits != null ? record.fits : 0;
+      var unitPrice=record.unit_price != null ? record.unit_price : '—';
+      var benefit=record.benefit != null ? record.benefit : '—';
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);'+highlight+'"><span>'+entry.id+'：'+fits+' 件</span><span>單價 '+unitPrice+' · 效益 '+benefit+'</span></div>';
+    });
+    return '<div style="display:grid;gap:2px;">'+rows.join('')+'</div>';
+  }
+
+  // Simplified export flow: picks whichever of A/B has the higher benefit
+  // (ties default to A), floors its fits to a whole-unit quantity. Independent
+  // of candidateOptions/buildCandidateOptionsFromNesting above -- those still
+  // feed the original delayed-binding flow, this is a separate decision made
+  // from the same nesting result.
+  function computeSimplifiedPlan(nesting){
+    var a=(nesting && nesting.A) || {};
+    var b=(nesting && nesting.B) || {};
+    var benefitA=a.benefit != null ? a.benefit : 0;
+    var benefitB=b.benefit != null ? b.benefit : 0;
+    var selectedPlan, selectedPlanTied=false;
+    if(benefitA === benefitB){ selectedPlan='A'; selectedPlanTied=true; }
+    else if(benefitB > benefitA){ selectedPlan='B'; }
+    else { selectedPlan='A'; }
+    var fits=(selectedPlan==='A' ? a.fits : b.fits) || 0;
+    return { selectedPlan:selectedPlan, selectedPlanTied:selectedPlanTied, selectedQuantity:Math.floor(fits) };
+  }
+
+  function renderSimplifiedPlanReadout(simplified){
+    var el=document.getElementById('simplifiedPlanReadout');
+    if(!el) return;
+    if(simplified.selectedQuantity===0){
+      el.textContent='本次無法生產完整 A 或 B，未入庫';
+      return;
+    }
+    var sloc=simplified.selectedPlan==='A' ? 'SBED' : 'CUBE';
+    var text='本次選定：'+simplified.selectedPlan+'，數量 '+simplified.selectedQuantity+' 個，將送往 '+sloc;
+    if(simplified.selectedPlanTied){ text+='（效益打平，預設選 A）'; }
+    el.textContent=text;
+  }
+
   function renderInventory(){
     var grid=document.getElementById('inventoryGrid');
     if(inventory.length===0){ grid.innerHTML='<p class="empty-note">目前庫存是空的，先上傳產品設計圖並完成入庫。</p>'; }
     else{
       grid.innerHTML=inventory.slice().reverse().map(function(it){
+        var candidateSummary=formatCandidateOptions(it.candidateOptions, it.bindingStatus);
+        var sloc=it.selectedPlan==='A' ? 'SBED' : 'CUBE';
+        var planSummary=it.selectedPlan ? ('選定'+it.selectedPlan+'×'+it.selectedQuantity+'→'+sloc+(it.selectedPlanTied?'(打平)':'')) : '';
         return '<div class="card">'+svgFor(it.pts,it.box)+
           '<div class="dims">'+it.area+' cm² · '+it.length+'×'+it.width+' cm</div>'+
-          '<div class="loc">儲位 '+it.location+(it.source==='photo'?' · 實拍':it.source==='vector'?' · CAD':' · 模擬')+(it.material?' · '+it.material:'')+(it.scrapId?' · '+it.scrapId:'')+(it.productAreaCm2!=null?' · 成品'+it.productAreaCm2+'cm²×'+it.productFitCount:'')+'</div></div>';
+          '<div class="loc">儲位 '+it.location+(it.source==='photo'?' · 實拍':it.source==='vector'?' · CAD':' · 模擬')+(it.material?' · '+it.material:'')+(it.productAreaCm2!=null?' · 成品'+it.productAreaCm2+'cm²×'+it.productFitCount:'')+(candidateSummary?' · '+candidateSummary:'')+(planSummary?' · '+planSummary:'')+'</div>'+
+          '<button class="ghost card-sap-export-btn" data-scrap-id="'+it.scrapId+'" style="margin-top:8px; font-size:12px; padding:6px 10px;"'+(it.sapExported?' disabled':'')+'>'+(it.sapExported?'已匯出':'匯出至 SAP')+'</button>'+
+          (it.exportResultText?'<div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">'+it.exportResultText+'</div>':'')+'</div>';
       }).join('');
     }
     document.getElementById('countKept').textContent=inventory.length;
@@ -334,6 +479,9 @@
     document.getElementById('sapExportEmpty').style.display='block';
     document.getElementById('sapExportEmpty').textContent='尚無可匯出的餘料 — 請先完成上方入庫。';
     document.getElementById('sapExportResult').textContent='';
+    document.getElementById('sapMatnrSelect').disabled=false;
+    document.getElementById('sapMatnrWarning').style.display='none';
+    document.getElementById('sapMatnrWarning').textContent='';
   }
 
   function showSapExportForm(){
@@ -344,6 +492,81 @@
     document.getElementById('sapProductAreaReadout').textContent=pendingSapExport.productAreaCm2+' cm²';
     document.getElementById('sapQuantity').value=1;
     document.getElementById('sapExportResult').textContent='';
+
+    var matnrSelect=document.getElementById('sapMatnrSelect');
+    var warningEl=document.getElementById('sapMatnrWarning');
+    var mappedMatnr=MATERIAL_TO_SAP_MATNR[pendingSapExport.material];
+    if(mappedMatnr){
+      matnrSelect.value=mappedMatnr;
+      matnrSelect.disabled=true;
+      warningEl.style.display='none';
+      warningEl.textContent='';
+    } else {
+      matnrSelect.disabled=false;
+      warningEl.style.display='block';
+      warningEl.textContent='找不到「'+pendingSapExport.material+'」對應的 SAP 料號，請手動選擇。';
+      apiPostJson('/api/client-log', {
+        level:'warning',
+        message:'找不到材質「'+pendingSapExport.material+'」對應的 SAP 料號，維持手動選擇 sapMatnrSelect。'
+      }).catch(function(){});
+    }
+  }
+
+  // Builds pendingSapExport from one specific inventory item (identified by
+  // scrapId) rather than trusting whatever the single global variable last
+  // held -- each card's own "匯出至 SAP" button calls this with its own
+  // scrapId, so exporting item N always exports item N, not whichever item
+  // happened to be stocked in most recently.
+  function openSapExportForScrapId(scrapId){
+    var item=inventory.filter(function(it){ return it.scrapId===scrapId; })[0];
+    if(!item){ return; }
+    pendingSapExport={
+      scrapId:item.scrapId,
+      material:item.material,
+      boardLengthCm:item.boardLengthCm, boardWidthCm:item.boardWidthCm,
+      sheetName:item.sheetName,
+      productAreaCm2:item.productAreaCm2, scrapAreaCm2:item.area,
+      scrapLengthCm:item.scrapLengthCm, scrapWidthCm:item.scrapWidthCm,
+      candidateOptions:item.candidateOptions || [],
+      bindingStatus:item.bindingStatus || 'UNBOUND'
+    };
+    showSapExportForm();
+  }
+
+  // New simplified export flow (supersedes openSapExportForScrapId/
+  // showSapExportForm above as the flow inventory cards actually trigger --
+  // those functions and the candidate_options/binding_status machinery they
+  // depend on are kept, just unused by this path). Looks the item up by its
+  // own scrapId every time it's called (same per-card-correct pattern as
+  // openSapExportForScrapId), writes its result back onto that specific
+  // item so re-rendering never shows one card's outcome on another's.
+  function exportSimplified(scrapId){
+    var item=inventory.filter(function(it){ return it.scrapId===scrapId; })[0];
+    if(!item || item.sapExported) return;
+    var matnr=MATERIAL_TO_SAP_MATNR_SIMPLE[item.material];
+    if(!matnr){
+      item.exportResultText='找不到材質「'+item.material+'」對應的 SAP 料號（SCRAP2-*），無法匯出。';
+      renderInventory();
+      return;
+    }
+    var sloc=item.selectedPlan==='A' ? 'SBED' : 'CUBE';
+    item.exportResultText='匯出中…';
+    renderInventory();
+    apiPostJson('/api/sap/export-simple/'+encodeURIComponent(scrapId), {
+      matnr: matnr, sloc: sloc, quantity: String(item.selectedQuantity)
+    }).then(function(res){
+      var data=res.data;
+      if(data && data.ok){
+        item.sapExported=true;
+        item.exportResultText='匯出成功 · 物料憑證 '+(data.matdoc||'（尚未回傳）')+(data.matdoc_year?'/'+data.matdoc_year:'');
+      } else {
+        item.exportResultText='匯出失敗：'+((data&&data.error)||'未知錯誤');
+      }
+      renderInventory();
+    }).catch(function(err){
+      item.exportResultText='無法連線後端（'+err.message+'）。';
+      renderInventory();
+    });
   }
 
   function showUploadMessage(message,isError){
@@ -366,6 +589,7 @@
     document.getElementById('nestingReadout').textContent='—';
     document.getElementById('productAreaReadout').textContent='—';
     document.getElementById('productFitReadout').textContent='—';
+    document.getElementById('simplifiedPlanReadout').textContent='—';
     document.getElementById('stockInBtn').disabled=false;
   }
 
@@ -564,6 +788,7 @@
     var nestingReadout=document.getElementById('nestingReadout');
     var productAreaReadout=document.getElementById('productAreaReadout');
     var productFitReadout=document.getElementById('productFitReadout');
+    var simplifiedPlanReadout=document.getElementById('simplifiedPlanReadout');
     var stockInBtn=document.getElementById('stockInBtn');
     var sheet=getSelectedSheet();
     if(!sheet){
@@ -579,6 +804,7 @@
       if(data.reason==='product_exceeds_sheet'){
         pendingTrace=null;
         materialRow.style.display='none';
+        simplifiedPlanReadout.textContent='—';
         log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm² — 超過所選原紙板（'+sheet.name+'）尺寸，無法排版，請改選更大的原紙板或確認設計圖。';
         renderInventory();
         return;
@@ -591,12 +817,12 @@
         materialRow.style.display='none';
         materialArea.textContent='—';
         nestingReadout.textContent='—';
+        simplifiedPlanReadout.textContent='—';
         renderInventory();
         return;
       }
 
-      var fitsText=Object.keys(data.nesting).map(function(id){ return id+': '+data.nesting[id].fits+' 件'; }).join(' / ');
-      nestingReadout.textContent=(fitsText||'—')+'　判定：'+(data.qualifies?'合格':'丟棄');
+      nestingReadout.innerHTML=buildNestingReadoutHtml(data)+'<div style="margin-top:6px;color:var(--ink-soft);">判定：'+(data.qualifies?'合格':'丟棄')+'</div>';
       productAreaReadout.textContent=data.product_area_cm2+' cm²';
       productFitReadout.textContent=data.product_fit_count+' 個';
       materialArea.textContent=data.area_cm2+' cm²';
@@ -604,13 +830,28 @@
       stockInBtn.disabled=!data.qualifies;
       if(data.qualifies){
         var leftoverBox=bbox(data.leftover_polygon_cm);
+        var simplified=computeSimplifiedPlan(data.nesting);
+        renderSimplifiedPlanReadout(simplified);
         pendingTrace=Object.assign({
           area:data.area_cm2, polygonCm:polygonCm, evaluateResult:data, sheet:sheet,
-          leftoverPts:data.leftover_polygon_cm, leftoverBox:leftoverBox
+          leftoverPts:data.leftover_polygon_cm, leftoverBox:leftoverBox,
+          candidateOptions:buildCandidateOptionsFromNesting(data.nesting),
+          bindingStatus:'UNBOUND',
+          selectedPlan:simplified.selectedPlan, selectedPlanTied:simplified.selectedPlanTied,
+          selectedQuantity:simplified.selectedQuantity
         }, meta);
-        log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 達門檻且可排入標準品，請選擇材質後按「入庫」。';
+        if(simplified.selectedQuantity===0){
+          // Treated as not qualifying: block stock-in/export entirely, even
+          // though the old candidate_options-based qualifies flag is true.
+          pendingTrace=null;
+          stockInBtn.disabled=true;
+          log.textContent='本次無法生產完整 A 或 B，未入庫。';
+        } else {
+          log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 達門檻且可排入標準品，請選擇材質後按「入庫」。';
+        }
       } else {
         pendingTrace=null;
+        simplifiedPlanReadout.textContent='—';
         log.textContent=meta.sourceLabel+'：餘料面積 '+data.area_cm2+' cm² 達門檻，但無法排入任何標準品，判定丟棄。';
       }
     }).catch(function(err){
@@ -763,7 +1004,9 @@
       source_type: pendingTrace.source==='vector' ? 'dxf' : (pendingTrace.source==='photo' ? 'image' : 'manual'),
       contour_method: pendingTrace.contourMethod || '自動偵測',
       source_filename: pendingTrace.sourceFilename || '',
-      batch_no: ''
+      batch_no: '',
+      candidate_options: pendingTrace.candidateOptions || [],
+      binding_status: pendingTrace.bindingStatus || 'UNBOUND'
     }).then(function(res){
       var data=res.data;
       if(!data || !data.ok){
@@ -774,25 +1017,25 @@
         area:pendingTrace.area, length:Math.round(pendingTrace.leftoverBox.length), width:Math.round(pendingTrace.leftoverBox.width),
         location:randomLocation(), pts:pendingTrace.leftoverPts, box:pendingTrace.leftoverBox,
         source:pendingTrace.source||'photo', material:material, scrapId:data.scrap_id,
-        productAreaCm2:pendingTrace.evaluateResult.product_area_cm2, productFitCount:pendingTrace.evaluateResult.product_fit_count
+        productAreaCm2:pendingTrace.evaluateResult.product_area_cm2, productFitCount:pendingTrace.evaluateResult.product_fit_count,
+        candidateOptions:pendingTrace.candidateOptions || [], bindingStatus:pendingTrace.bindingStatus || 'UNBOUND',
+        boardLengthCm:pendingTrace.sheet.length_cm, boardWidthCm:pendingTrace.sheet.width_cm,
+        sheetName:pendingTrace.sheet.name,
+        scrapLengthCm:Math.round(pendingTrace.leftoverBox.length*100)/100,
+        scrapWidthCm:Math.round(pendingTrace.leftoverBox.width*100)/100,
+        selectedPlan:pendingTrace.selectedPlan, selectedPlanTied:pendingTrace.selectedPlanTied,
+        selectedQuantity:pendingTrace.selectedQuantity,
+        sapExported:false, exportResultText:''
       };
       inventory.push(item);
       log.textContent='已入庫：'+data.scrap_id+' · 餘料面積 '+item.area+' cm² · 材質 '+material+' · 儲位 '+item.location+'。';
-      pendingSapExport={
-        scrapId:data.scrap_id,
-        boardLengthCm:pendingTrace.sheet.length_cm, boardWidthCm:pendingTrace.sheet.width_cm,
-        sheetName:pendingTrace.sheet.name,
-        productAreaCm2:pendingTrace.evaluateResult.product_area_cm2,
-        scrapLengthCm:Math.round(pendingTrace.leftoverBox.length*100)/100,
-        scrapWidthCm:Math.round(pendingTrace.leftoverBox.width*100)/100
-      };
-      showSapExportForm();
       pendingTrace=null;
       document.getElementById('materialRow').style.display='none';
       document.getElementById('materialArea').textContent='—';
       document.getElementById('nestingReadout').textContent='—';
       document.getElementById('productAreaReadout').textContent='—';
       document.getElementById('productFitReadout').textContent='—';
+      document.getElementById('simplifiedPlanReadout').textContent='—';
       renderInventory();
     }).catch(function(err){
       log.textContent='無法連線後端寫入資料庫（'+err.message+'）。';
@@ -812,15 +1055,21 @@
       board_length_cm: pendingSapExport.boardLengthCm,
       board_width_cm: pendingSapExport.boardWidthCm,
       product_area_cm2: pendingSapExport.productAreaCm2,
+      scrap_area_cm2: pendingSapExport.scrapAreaCm2,
       quantity: quantity,
       scrap_length_cm: pendingSapExport.scrapLengthCm,
-      scrap_width_cm: pendingSapExport.scrapWidthCm
+      scrap_width_cm: pendingSapExport.scrapWidthCm,
+      candidate_options: pendingSapExport.candidateOptions || [],
+      binding_status: pendingSapExport.bindingStatus || 'UNBOUND'
     }).then(function(res){
       var data=res.data;
       exportBtn.disabled=false;
       if(data && data.ok){
         resultEl.textContent='匯出成功 — 餘料面積 '+data.remnant_area+' cm² · 批次號 '+(data.batch||'（尚未回傳）')+' · 儲位分區 '+(data.bin_zone||'（尚未回傳）')+(data.message?'（'+data.message+'）':'');
+        var exportedItem=inventory.filter(function(it){ return it.scrapId===pendingSapExport.scrapId; })[0];
+        if(exportedItem){ exportedItem.sapExported=true; }
         hideSapExportForm();
+        renderInventory();
       } else {
         resultEl.textContent='匯出失敗：'+((data&&data.error)||'未知錯誤');
       }
@@ -828,6 +1077,12 @@
       exportBtn.disabled=false;
       resultEl.textContent='無法連線後端（'+err.message+'）。';
     });
+  });
+
+  document.getElementById('inventoryGrid').addEventListener('click', function(e){
+    var btn=e.target.closest('.card-sap-export-btn');
+    if(!btn) return;
+    exportSimplified(btn.getAttribute('data-scrap-id'));
   });
 
   document.getElementById('resetBtn').addEventListener('click', function(){
@@ -840,6 +1095,7 @@
   });
 
   renderInventory();
+  populateMaterialSelects();
   populateSheetSelect();  // "自訂尺寸…" available immediately, before/without a backend response
   loadBackendInfo();
 })();

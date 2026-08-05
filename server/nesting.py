@@ -11,7 +11,8 @@ Method (as agreed for this POC -- not a precise no-fit-polygon algorithm):
    an already-placed copy of the SAME product. Keep whichever orientation places more.
 3. Each product is evaluated independently on its own placement mask (but sharing the
    same underlying occupancy grid), because the Excel record needs "how many A" and
-   "how many B" as two independent hypothetical answers, not a single mixed A+B packing.
+   "how many B" as two independent hypothetical answers. A single mixed A+B layout is
+   handled separately by greedy_mixed_nesting() (shelf packing, see its docstring).
 
 Rectangle dimensions are rounded UP to whole cells, which is a conservative bias: the
 algorithm will never claim a fit that doesn't actually exist, but may undercount by a
@@ -19,7 +20,9 @@ sliver near the polygon boundary. That is the safe direction for a "is this scra
 usable" judgment.
 """
 
+import logging
 import math
+import time
 
 import numpy as np
 import shapely
@@ -27,6 +30,10 @@ from shapely import affinity
 from shapely.geometry import Polygon
 
 import config
+
+logger = logging.getLogger(__name__)
+
+MIXED_NESTING_SLOW_THRESHOLD_SECONDS = 1.0
 
 
 def _choose_cell_size(bbox_w, bbox_h, base_cell_size, max_cells):
@@ -212,3 +219,80 @@ def pack_rect_into_polygon(polygon, item_length_cm, item_width_cm, cell_size_cm=
         "cell_size_cm": g,
         "leftover_polygon": leftover,
     }
+
+
+def _shelf_pack_pass(polygon, minx, miny, maxx, maxy, row_height, primary, secondary):
+    """One greedy shelf-packing pass over `polygon`'s bounding box: fills each
+    row with `primary` left-to-right, then whatever `secondary` copies still
+    fit in that same row's leftover width. `row_height` is shared by both
+    products (the larger of both products' larger sides) so that neither one
+    can overflow into the row below regardless of which one occupies a given
+    row. Every candidate rectangle is checked against the real (possibly
+    notched/concave) polygon via covers() and dropped if it pokes outside --
+    only the bounding box is guaranteed rectangular, not the polygon itself.
+    Returns (count_primary, count_secondary)."""
+    if row_height <= 0:
+        return 0, 0
+    num_rows = int((maxy - miny) // row_height)
+    count_primary = 0
+    count_secondary = 0
+    for row_idx in range(num_rows):
+        row_y0 = miny + row_idx * row_height
+        cursor_x = minx
+        while cursor_x + primary["length_cm"] <= maxx + 1e-9:
+            rect = shapely.box(cursor_x, row_y0, cursor_x + primary["length_cm"], row_y0 + primary["width_cm"])
+            if polygon.covers(rect):
+                count_primary += 1
+            cursor_x += primary["length_cm"]
+        while cursor_x + secondary["length_cm"] <= maxx + 1e-9:
+            rect = shapely.box(cursor_x, row_y0, cursor_x + secondary["length_cm"], row_y0 + secondary["width_cm"])
+            if polygon.covers(rect):
+                count_secondary += 1
+            cursor_x += secondary["length_cm"]
+    return count_primary, count_secondary
+
+
+def greedy_mixed_nesting(polygon, product_a, product_b):
+    """Shelf-based greedy approximation for packing a MIX of product_a and
+    product_b into the same scrap polygon -- unlike compute_fits_all, which
+    scores each product independently on its own hypothetical full placement,
+    this tries to actually combine both into one shared layout. Not an
+    optimal solver: it only tries two simple row orderings (B-then-A and
+    A-then-B, "shelf packing") and keeps whichever yields the higher benefit.
+
+    Returns {"fits_a": int, "fits_b": int, "benefit": float, "strategy": str}.
+    """
+    min_product_area = min(
+        product_a["length_cm"] * product_a["width_cm"],
+        product_b["length_cm"] * product_b["width_cm"],
+    )
+    if polygon.area < min_product_area:
+        return {"fits_a": 0, "fits_b": 0, "benefit": 0.0, "strategy": "too_small"}
+
+    unit_price_a = product_a.get("unit_price")
+    if unit_price_a is None:
+        logger.warning("greedy_mixed_nesting: product_a is missing unit_price, defaulting to 0")
+        unit_price_a = 0.0
+    unit_price_b = product_b.get("unit_price")
+    if unit_price_b is None:
+        logger.warning("greedy_mixed_nesting: product_b is missing unit_price, defaulting to 0")
+        unit_price_b = 0.0
+
+    minx, miny, maxx, maxy = polygon.bounds
+    # Shared by both passes so a row can safely hold either product (or both)
+    # without one of them overflowing into the row below.
+    row_height = max(product_a["length_cm"], product_a["width_cm"], product_b["length_cm"], product_b["width_cm"])
+
+    start = time.monotonic()
+    b_first_b, b_first_a = _shelf_pack_pass(polygon, minx, miny, maxx, maxy, row_height, product_b, product_a)
+    a_first_a, a_first_b = _shelf_pack_pass(polygon, minx, miny, maxx, maxy, row_height, product_a, product_b)
+    elapsed = time.monotonic() - start
+    if elapsed > MIXED_NESTING_SLOW_THRESHOLD_SECONDS:
+        logger.warning("greedy_mixed_nesting: took %.2fs for polygon bounds=%s", elapsed, polygon.bounds)
+
+    benefit_b_then_a = round(b_first_a * unit_price_a + b_first_b * unit_price_b, 2)
+    benefit_a_then_b = round(a_first_a * unit_price_a + a_first_b * unit_price_b, 2)
+
+    if benefit_b_then_a >= benefit_a_then_b:
+        return {"fits_a": b_first_a, "fits_b": b_first_b, "benefit": benefit_b_then_a, "strategy": "B_then_A"}
+    return {"fits_a": a_first_a, "fits_b": a_first_b, "benefit": benefit_a_then_b, "strategy": "A_then_B"}

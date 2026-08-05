@@ -1,0 +1,115 @@
+SAP_ICF_URL         = https://ncus4ap.mgt.ncu.edu.tw:44320/sap/bc/zai_dim?sap-client=700
+SAP_ICF_USERNAME    = CERP16
+SAP_ICF_PASSWORD    = ********（已設定）
+SAP_ICF_VERIFY_SSL  = false
+SAP_ICF_TIMEOUT_SECONDS = 30（config.py 預設值）
+
+本機測試：http://127.0.0.1:5000
+其他裝置請開：http://140.115.87.190:5000
+
+已綁定 0.0.0.0，同網路裝置都連得到這個 port -- 若還沒開防火牆，先以系統管理員身分執行 allow_firewall.ps1。
+Demo 結束後記得跑 remove_firewall.ps1 收回規則。
+
+ * Tip: There are .env files present. Install python-dotenv to use them.
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://140.115.87.190:5000
+Press CTRL+C to quit
+127.0.0.1 - - [29/Jul/2026 06:25:21] "GET /api/config HTTP/1.1" 200 -
+140.115.87.190 - - [29/Jul/2026 06:27:25] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:28:36] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [29/Jul/2026 06:28:36] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:28:36] "GET /api/standard-products HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:28:36] "GET /api/standard-sheets HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:37:24] "POST /api/analyze-dxf HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:37:24] "POST /api/evaluate HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:37:30] "POST /api/stock-in HTTP/1.1" 200 -
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+127.0.0.1 - - [29/Jul/2026 06:39:18] "POST /api/sap/export/SCRAP-00032 HTTP/1.1" 502 -
+127.0.0.1 - - [29/Jul/2026 06:39:28] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [29/Jul/2026 06:39:29] "GET /api/standard-products HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:39:29] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:39:29] "GET /api/standard-sheets HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:40:03] "POST /api/analyze-dxf HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:40:03] "POST /api/evaluate HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:40:11] "POST /api/stock-in HTTP/1.1" 200 -
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+127.0.0.1 - - [29/Jul/2026 06:41:58] "POST /api/sap/export/SCRAP-00033 HTTP/1.1" 502 -
+127.0.0.1 - - [29/Jul/2026 06:43:27] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [29/Jul/2026 06:43:27] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:43:27] "GET /api/standard-products HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:43:27] "GET /api/standard-sheets HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:43:55] "POST /api/analyze-dxf HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:43:55] "POST /api/evaluate HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:43:59] "POST /api/stock-in HTTP/1.1" 200 -
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+127.0.0.1 - - [29/Jul/2026 06:45:45] "POST /api/sap/export/SCRAP-00034 HTTP/1.1" 502 -
+127.0.0.1 - - [29/Jul/2026 06:46:15] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [29/Jul/2026 06:46:15] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:46:15] "GET /api/standard-products HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:46:15] "GET /api/standard-sheets HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:47:06] "POST /api/analyze-dxf HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:47:06] "POST /api/evaluate HTTP/1.1" 200 -
+127.0.0.1 - - [29/Jul/2026 06:47:14] "POST /api/stock-in HTTP/1.1" 200 -
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+C:\Users\User\Downloads\NiggaHorse\NiggaHorse\server\.venv\Lib\site-packages\urllib3\connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ncus4ap.mgt.ncu.edu.tw'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+127.0.0.1 - - [29/Jul/2026 06:48:59] "POST /api/sap/export/SCRAP-00035 HTTP/1.1" 502 -
+18.116.101.220 - - [29/Jul/2026 07:08:21] "GET / HTTP/1.1" 200 -
+18.116.101.220 - - [29/Jul/2026 07:10:41] "GET / HTTP/1.1" 200 -
+18.116.101.220 - - [29/Jul/2026 07:12:04] code 400, message Bad request syntax ('\x16\x03\x01\x01\x00\x01\x00\x00\xfc\x03\x03\xcd\x04')
+18.116.101.220 - - [29/Jul/2026 07:12:04] "\x16\x03\x01\x01\x00\x01\x00\x00\xfc\x03\x03\xcd\x04" 400 -
+18.116.101.220 - - [29/Jul/2026 07:15:08] code 400, message Bad request version ('\xc0\x14\xc0')
+18.116.101.220 - - [29/Jul/2026 07:15:08] "\x16\x03\x01\x00\xee\x01\x00\x00\xea\x03\x03\xf9x\xceh\xd3\xd8\x94[÷L\xf3\xe5\x91v\xec\xbf\xael\xd5o#0\xfe\xce\xefg@\x90o.?\xc1 \x88\xd4ko?±\xccW\x96\xcc\xfd\x89\x0c\x0f,¯\x95J\x91\x08M%\xa1\x9eB\x05\xc9 \xbaP\x8c\xfe\x00&\xcc\xa8\xcc\xa9\xc0/\xc00\xc0+\xc0,\xc0\x13\xc0\x09\xc0\x14\xc0" 400 -
+151.243.11.231 - - [29/Jul/2026 07:40:26] "GET / HTTP/1.1" 200 -
+151.243.11.231 - - [29/Jul/2026 07:40:28] "GET /favicon.ico HTTP/1.1" 404 -
+198.235.24.201 - - [29/Jul/2026 09:20:07] "GET / HTTP/1.1" 200 -
+47.245.142.46 - - [29/Jul/2026 09:36:25] code 400, message Bad request version ('RTSP/1.0')
+47.245.142.46 - - [29/Jul/2026 09:36:25] "OPTIONS / RTSP/1.0" 400 -
+47.245.142.46 - - [29/Jul/2026 09:37:02] code 400, message Bad request version ('\xc0\x13\xc0')
+47.245.142.46 - - [29/Jul/2026 09:37:02] "\x16\x03\x01\x00\xee\x01\x00\x00\xea\x03\x03I\x06\xb2\xf9\xbc\x99i\xc0Y\xfb\xf8\xbae-\x83Ud]\x0e\x8d·b8\xb4g\xc6\xdd9dZ8f g\xc1\x81i\xb3\xf6\xf2\xcb°\xa9\x19N\xd6\xbd\x95g|p\xfc\xe9<Z\xa1\x90T·\xe9￥8'O;\x00&\xc0+\xc0/\xc0,\xc00\xcc\xa9\xcc\xa8\xc0\x09\xc0\x13\xc0" 400 -
+47.245.142.46 - - [29/Jul/2026 09:37:12] "GET / HTTP/1.1" 200 -
+47.245.142.46 - - [29/Jul/2026 09:37:13] "GET / HTTP/1.1" 200 -
+123.160.223.72 - - [29/Jul/2026 09:37:39] "GET / HTTP/1.1" 200 -
+198.44.139.22 - - [29/Jul/2026 09:37:40] "GET / HTTP/1.1" 200 -
+198.44.139.22 - - [29/Jul/2026 09:37:42] "GET /api/standard-products HTTP/1.1" 200 -
+198.44.139.22 - - [29/Jul/2026 09:37:42] "GET /api/config HTTP/1.1" 200 -
+198.44.139.22 - - [29/Jul/2026 09:37:42] "GET /api/standard-sheets HTTP/1.1" 200 -
+123.160.223.73 - - [29/Jul/2026 09:37:45] "GET /favicon.ico HTTP/1.1" 404 -
+198.11.177.252 - - [29/Jul/2026 11:14:09] code 400, message Bad request version ('RTSP/1.0')
+198.11.177.252 - - [29/Jul/2026 11:14:09] "OPTIONS / RTSP/1.0" 400 -
+198.11.177.252 - - [29/Jul/2026 11:14:46] code 400, message Bad request version ('\xc0\x13\xc0')
+198.11.177.252 - - [29/Jul/2026 11:14:46] "\x16\x03\x01\x00\xee\x01\x00\x00\xea\x03\x03I\x06\xb2\xf9\xbc\x99i\xc0Y\xfb\xf8\xbae-\x83Ud]\x0e\x8d·b8\xb4g\xc6\xdd9dZ8f g\xc1\x81i\xb3\xf6\xf2\xcb°\xa9\x19N\xd6\xbd\x95g|p\xfc\xe9<Z\xa1\x90T·\xe9￥8'O;\x00&\xc0+\xc0/\xc0,\xc00\xcc\xa9\xcc\xa8\xc0\x09\xc0\x13\xc0" 400 -
+198.11.177.252 - - [29/Jul/2026 11:14:56] "GET / HTTP/1.1" 200 -
+198.11.177.252 - - [29/Jul/2026 11:14:57] "GET / HTTP/1.1" 200 -
+123.160.223.75 - - [29/Jul/2026 11:15:28] "GET / HTTP/1.1" 200 -
+123.160.223.73 - - [29/Jul/2026 11:15:30] "GET /favicon.ico HTTP/1.1" 404 -
+8.216.11.79 - - [29/Jul/2026 14:42:19] code 400, message Bad request version ('RTSP/1.0')
+8.216.11.79 - - [29/Jul/2026 14:42:19] "OPTIONS / RTSP/1.0" 400 -
+8.216.11.79 - - [29/Jul/2026 14:42:55] code 400, message Bad request version ('\xc0\x13\xc0')
+8.216.11.79 - - [29/Jul/2026 14:42:55] "\x16\x03\x01\x00\xee\x01\x00\x00\xea\x03\x03I\x06\xb2\xf9\xbc\x99i\xc0Y\xfb\xf8\xbae-\x83Ud]\x0e\x8d·b8\xb4g\xc6\xdd9dZ8f g\xc1\x81i\xb3\xf6\xf2\xcb°\xa9\x19N\xd6\xbd\x95g|p\xfc\xe9<Z\xa1\x90T·\xe9￥8'O;\x00&\xc0+\xc0/\xc0,\xc00\xcc\xa9\xcc\xa8\xc0\x09\xc0\x13\xc0" 400 -
+8.216.11.79 - - [29/Jul/2026 14:43:06] "GET / HTTP/1.1" 200 -
+8.216.11.79 - - [29/Jul/2026 14:43:06] "GET / HTTP/1.1" 200 -
+123.160.223.74 - - [29/Jul/2026 14:43:23] "GET / HTTP/1.1" 200 -
+123.160.223.72 - - [29/Jul/2026 14:43:26] "GET /favicon.ico HTTP/1.1" 404 -

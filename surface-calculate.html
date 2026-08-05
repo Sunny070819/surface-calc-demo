@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台芯實業 · 邊角料 × SAP MM 概念驗證</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Palette references 洛陽紙櫃 (theyoungsquare.com) -- the consumer-facing brand
+     built on 台芯實業's honeycomb paperboard: warm terracotta + paper cream + a
+     deep warm brown ink, Noto Serif TC for display type, Noto Sans TC for body. */
+  :root{
+    --paper:#F3ECE0;
+    --paper-raised:#FBF8F2;
+    --ink:#2B1B10;
+    --ink-soft:#6E5A45;
+    --ink-faint:#A6957E;
+    --line:#DFD3BE;
+    --line-strong:#C7B79C;
+    --honeycomb:#A36836;
+    --honeycomb-deep:#6B4423;
+    --honeycomb-tint:#EFE0CC;
+    --slate:#6B4423;
+    --slate-deep:#402A16;
+    --slate-tint:#EFE6D8;
+    --danger:#A8432E;
+    --danger-tint:#F3E3DD;
+    --radius:3px;
+    --font-display:'Noto Serif TC',serif;
+    --font-body:'Noto Sans TC',sans-serif;
+    --font-mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background-color:var(--paper); color:var(--ink);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.42 0 0 0 0 0.29 0 0 0 0 0.16 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    font-family:var(--font-body); line-height:1.6; font-size:15px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:1000px; margin:0 auto; padding:0 32px; }
+  a{color:var(--slate);}
+
+  /* topbar */
+  .topbar{ border-bottom:1px solid var(--line); }
+  .topbar-inner{ display:flex; align-items:center; justify-content:space-between; padding:18px 0; }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{ height:32px; width:auto; flex:none; display:block; }
+  .brand-name{ font-family:var(--font-display); font-weight:600; font-size:15px; letter-spacing:.18em; }
+  .brand-sub{ font-size:12px; color:var(--ink-soft); }
+  .tag{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.04em;
+    color:var(--slate-deep); background:var(--slate-tint); border:1px solid var(--line-strong);
+    padding:5px 10px; border-radius:var(--radius); text-transform:uppercase;
+  }
+
+  /* hero */
+  .hero{ padding:64px 0 48px; display:grid; grid-template-columns:1.1fr .9fr; gap:40px; align-items:center; border-bottom:1px solid var(--line); }
+  .eyebrow{ font-family:var(--font-mono); font-size:12px; color:var(--honeycomb-deep); letter-spacing:.06em; text-transform:uppercase; margin:0 0 16px; }
+  h1{ font-family:var(--font-display); font-weight:600; font-size:38px; line-height:1.18; margin:0 0 18px; letter-spacing:-.01em; }
+  .lede{ color:var(--ink-soft); font-size:16px; max-width:44ch; margin:0 0 22px; }
+  .hero-meta{ display:flex; gap:24px; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+  .hero-meta b{ display:block; font-family:var(--font-body); font-weight:600; color:var(--ink); font-size:14px; }
+
+  .sig{ position:relative; }
+  .sig svg{ width:100%; height:auto; display:block; }
+
+  /* sections */
+  section.block{ padding:52px 0; border-bottom:1px solid var(--line); }
+  .block-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .num{ font-family:var(--font-mono); font-size:13px; color:var(--honeycomb-deep); border:1px solid var(--line-strong); padding:2px 8px; border-radius:var(--radius); }
+  h2{ font-family:var(--font-display); font-weight:600; font-size:21px; margin:0; }
+  .block-desc{ color:var(--ink-soft); max-width:60ch; margin:6px 0 28px; font-size:14px; }
+
+  /* controls */
+  .panel{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; }
+  .row{ display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  label{ font-size:12px; color:var(--ink-soft); font-family:var(--font-mono); }
+  input[type=number]{
+    font-family:var(--font-mono); font-size:14px; border:1px solid var(--line-strong);
+    background:var(--paper); color:var(--ink); padding:9px 10px; border-radius:var(--radius); width:130px;
+  }
+  input[type=number]:focus{ outline:2px solid var(--slate); outline-offset:1px; }
+  button{
+    font-family:var(--font-body); font-weight:600; font-size:14px; cursor:pointer;
+    border-radius:var(--radius); border:1px solid var(--ink); background:var(--ink); color:var(--paper);
+    padding:11px 18px; transition:transform .08s ease;
+  }
+  button:active{ transform:scale(.98); }
+  button.ghost{ background:transparent; color:var(--ink); border:1px solid var(--line-strong); }
+  button.ghost:hover{ border-color:var(--ink); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  #log{ font-family:var(--font-mono); font-size:13px; color:var(--slate-deep); min-height:20px; margin-top:14px; }
+
+  /* stats */
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:22px 0; }
+  .stat{ border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; background:var(--paper-raised); }
+  .stat .k{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+  .stat .v{ font-family:var(--font-display); font-weight:600; font-size:28px; margin-top:4px; }
+
+  /* inventory grid */
+  #inventoryGrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+  .card{ border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-raised); padding:12px; }
+  .card svg{ width:100%; height:80px; display:block; }
+  .card .dims{ font-family:var(--font-mono); font-weight:500; font-size:13px; margin-top:8px; }
+  .card .loc{ font-size:11px; color:var(--honeycomb-deep); font-family:var(--font-mono); margin-top:6px; }
+  .empty-note{ color:var(--ink-faint); font-size:13px; font-style:italic; }
+
+  select{
+    font-family:var(--font-mono); font-size:14px; border:1px solid var(--line-strong);
+    background:var(--paper); color:var(--ink); padding:9px 10px; border-radius:var(--radius); width:150px;
+  }
+  select:focus{ outline:2px solid var(--slate); outline-offset:1px; }
+  .area-readout{ font-family:var(--font-mono); font-size:16px; font-weight:500; color:var(--slate-deep); padding:9px 0; }
+
+  footer{ padding:32px 0 60px; font-size:12px; color:var(--ink-faint); font-family:var(--font-mono); }
+
+  @media (max-width:760px){
+    .hero{ grid-template-columns:1fr; }
+    .stats{ grid-template-columns:1fr; }
+    h1{ font-size:29px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="wrap topbar-inner">
+  <div class="brand">
+    <img class="brand-mark" src="data:image/gif;base64,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" alt="台芯實業 logo">
+    <div><div class="brand-name">台芯實業股份有限公司</div><div class="brand-sub">Honeycomb paper manufacturing</div></div>
+  </div>
+  <div class="tag">中華企業資源規劃 · ERP 模擬導入 PoC</div>
+</div></div>
+
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">概念驗證 · SAP MM</p>
+      <h1>從一張產品設計圖，<br>到一筆可入庫的紀錄。</h1>
+      <p class="lede">上傳產品設計圖並選定標準原紙板尺寸，這套 PoC 會算出成品面積、能從原紙板排出幾個成品，並反推餘料面積。達到門檻的餘料可以直接入庫，方便後續管理與再利用。</p>
+      <div class="hero-meta">
+        <div><b>設計圖 → 排版</b>成品面積與排版試算</div>
+        <div><b>排版 → 入庫</b>門檻判斷後入庫</div>
+      </div>
+    </div>
+    <div class="sig">
+      <svg viewBox="0 0 260 220" aria-hidden="true">
+        <g stroke="#C98A4A" stroke-width="1" opacity="0.55">
+          <line x1="0" y1="55" x2="260" y2="55"/><line x1="0" y1="110" x2="260" y2="110"/><line x1="0" y1="165" x2="260" y2="165"/>
+          <line x1="65" y1="0" x2="65" y2="220"/><line x1="130" y1="0" x2="130" y2="220"/><line x1="195" y1="0" x2="195" y2="220"/>
+        </g>
+        <rect x="1" y="1" width="258" height="218" fill="none" stroke="#C98A4A" stroke-width="1.5" opacity="0.55"/>
+        <path d="M50 120 C40 90 65 60 100 62 C140 64 150 40 180 55 C210 70 205 105 190 120 C175 135 190 155 165 165 C135 178 100 170 80 155 C62 142 60 132 50 120 Z"
+          fill="#FCFAF4" stroke="#211D16" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="10" y="212" font-family="IBM Plex Mono" font-size="10" fill="#7A4620">面積 = ΣA(cell)</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="block" style="border-bottom:none;">
+    <div class="block-head"><span class="num">01</span><h2>產品設計圖 — 排版與餘料試算</h2></div>
+    <p class="block-desc">上傳產品設計圖（照片或 CAD 檔案）— 系統會算出設計圖中的成品面積，並把成品反向排版進你選定的標準原紙板，算出可排入幾個成品、以及排完之後的餘料面積；PDF 與 DWG 會依照可解析程度切換流程。</p>
+    <div class="panel">
+      <div class="row"><button class="ghost" id="resetBtn">重設</button></div>
+      <div id="log">尚未開始 — 請先選擇標準原紙板尺寸，再上傳產品設計圖。</div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <div class="row">
+        <div class="field"><label>標準原紙板尺寸</label>
+          <select id="sheetSelect"><option value="">請選擇原紙板尺寸…</option></select>
+        </div>
+        <div class="field" id="customSheetLengthField" style="display:none;"><label>長 (cm)</label><input type="number" id="customSheetLength" min="0.1" step="0.1" style="width:110px;"></div>
+        <div class="field" id="customSheetWidthField" style="display:none;"><label>寬 (cm)</label><input type="number" id="customSheetWidth" min="0.1" step="0.1" style="width:110px;"></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <div class="row" style="margin-bottom:4px;">
+        <div class="field" style="flex:1; min-width:220px;"><label>上傳產品設計圖</label><input type="file" id="photoInput" accept="image/*,.pdf,.dxf,.dwg"></div>
+      </div>
+      <p id="uploadHint" style="font-size:13px; color:var(--ink-soft); margin:10px 0 12px;">第 1 步：先選擇標準原紙板尺寸，再上傳產品設計圖（照片或 CAD 檔案）；照片流程會先做比例校正，DXF 會直接用向量座標計算面積。</p>
+      <canvas id="photoCanvas" style="max-width:100%; border:1px solid var(--line-strong); display:none; cursor:crosshair; border-radius:var(--radius);"></canvas>
+      <div id="calibRow" class="row" style="display:none; margin-top:14px;">
+        <div class="field"><label>兩點之間實際長度 (cm)</label><input type="number" id="calibCm" value="5" min="0.1" step="0.1" style="width:110px;"></div>
+        <button id="calibConfirm" class="ghost">確認比例</button>
+      </div>
+      <div id="materialRow" class="row" style="display:none; margin-top:14px;">
+        <div class="field"><label>材質</label>
+          <select id="materialSelect">
+            <option value="防火">防火</option>
+            <option value="防水">防水</option>
+            <option value="再生紙">再生紙</option>
+          </select>
+        </div>
+        <div class="field"><label>成品面積 (cm²)</label><div class="area-readout" id="productAreaReadout">—</div></div>
+        <div class="field"><label>原紙板可排入成品數</label><div class="area-readout" id="productFitReadout">—</div></div>
+        <div class="field"><label>餘料面積 (cm²)</label><div class="area-readout" id="materialArea">—</div></div>
+        <div class="field"><label>A/B 排列判定</label><div class="area-readout" id="nestingReadout" style="font-size:13px;">—</div></div>
+        <button id="stockInBtn">入庫</button>
+      </div>
+      <p id="backendInfo" style="font-size:12px; color:var(--ink-faint); margin:14px 0 0; font-family:var(--font-mono);"></p>
+    </div>
+
+    <div class="stats" style="margin-top:28px;">
+      <div class="stat"><div class="k">已入庫件數</div><div class="v" id="countKept">0</div></div>
+      <div class="stat"><div class="k">低於門檻丟棄</div><div class="v" id="countDiscard">0</div></div>
+    </div>
+    <div id="inventoryGrid"><p class="empty-note">目前庫存是空的，先上傳產品設計圖並完成入庫。</p></div>
+  </section>
+
+  <section class="block" style="border-bottom:none;">
+    <div class="block-head"><span class="num">02</span><h2>SAP MM 匯出 — 邊角料入庫</h2></div>
+    <p class="block-desc">選擇邊角料材質，確認原紙板規格與成品面積後送出；SAP 端會自動算出餘料面積、完成入庫（MIGO 501）與批次分類，並回傳批次號與儲位分區。</p>
+    <div class="panel">
+      <p id="sapExportEmpty" class="empty-note">尚無可匯出的餘料 — 請先完成上方入庫。</p>
+      <div id="sapExportForm" class="row" style="display:none;">
+        <div class="field"><label>餘料編號</label><div class="area-readout" id="sapScrapId">—</div></div>
+        <div class="field"><label>材質（SAP 料號）</label>
+          <select id="sapMatnrSelect">
+            <option value="SCRAP-FR">防火（SCRAP-FR）</option>
+            <option value="SCRAP-WP">防水（SCRAP-WP）</option>
+            <option value="SCRAP-RC">再生紙（SCRAP-RC）</option>
+          </select>
+        </div>
+        <div class="field"><label>原紙板規格</label><div class="area-readout" id="sapBoardReadout">—</div></div>
+        <div class="field"><label>成品面積 (cm²)</label><div class="area-readout" id="sapProductAreaReadout">—</div></div>
+        <div class="field"><label>入庫片數</label><input type="number" id="sapQuantity" value="1" min="1" step="1" style="width:90px;"></div>
+        <button id="sapExportBtn">匯出至 SAP</button>
+      </div>
+      <div id="sapExportResult" style="margin-top:14px; font-family:var(--font-mono); font-size:13px; color:var(--slate-deep);"></div>
+    </div>
+  </section>
+
+  <footer>台芯實業股份有限公司 × 中華企業資源規劃 實習顧問專案 — ERP 模擬導入・概念驗證 demo</footer>
+</div>
+
+<script>
+(function(){
+  var inventory = []; var discardCount = 0; var pendingTrace = null; var pendingSapExport = null;
+  var photoState = { img:null, scaleCmPerPx:null, calibPts:[], tracePts:[], mode:'calib', originalFile:null, contourMethod:null, autoContourPts:null };
+  var standardSheets = [];
+  var BACKEND_BASE = (location.protocol==='file:') ? 'http://127.0.0.1:5000' : '';
+
+  function apiUrl(path){ return BACKEND_BASE + path; }
+
+  function apiPostJson(path, body){
+    return fetch(apiUrl(path), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+      .then(function(res){ return res.json().then(function(data){ return { status:res.status, data:data }; }); });
+  }
+
+  function apiPostForm(path, formData){
+    return fetch(apiUrl(path), { method:'POST', body: formData })
+      .then(function(res){ return res.json().then(function(data){ return { status:res.status, data:data }; }); });
+  }
+
+  function populateSheetSelect(){
+    var sel=document.getElementById('sheetSelect');
+    if(!sel) return;
+    var current=sel.value;
+    sel.innerHTML='<option value="">請選擇原紙板尺寸…</option>'+
+      standardSheets.map(function(s){ return '<option value="'+s.id+'">'+s.name+'（'+s.length_cm+'×'+s.width_cm+'cm）</option>'; }).join('')+
+      '<option value="custom">自訂尺寸…</option>';
+    if(current) sel.value=current;
+  }
+
+  function getSelectedSheet(){
+    var sel=document.getElementById('sheetSelect');
+    if(!sel || !sel.value) return null;
+    if(sel.value==='custom'){
+      var length=parseFloat(document.getElementById('customSheetLength').value);
+      var width=parseFloat(document.getElementById('customSheetWidth').value);
+      if(!(length>0) || !(width>0)) return null;
+      return { length_cm:length, width_cm:width, name:'自訂 '+length+'×'+width+'cm' };
+    }
+    var found=standardSheets.filter(function(s){ return s.id===sel.value; })[0];
+    if(!found) return null;
+    return { length_cm:found.length_cm, width_cm:found.width_cm, name:found.name };
+  }
+
+  function loadBackendInfo(){
+    var el=document.getElementById('backendInfo');
+    if(!el) return;
+    Promise.all([
+      fetch(apiUrl('/api/config')).then(function(r){ return r.json(); }),
+      fetch(apiUrl('/api/standard-products')).then(function(r){ return r.json(); }),
+      fetch(apiUrl('/api/standard-sheets')).then(function(r){ return r.json(); })
+    ]).then(function(results){
+      var cfg=results[0], products=results[1], sheets=results[2];
+      standardSheets=sheets;
+      populateSheetSelect();
+      var prodText=products.map(function(p){ return p.name+'('+p.length_cm+'×'+p.width_cm+'cm)'; }).join(' · ');
+      el.textContent='標準品: '+prodText+' · 餘料丟棄門檻: '+cfg.threshold_cm2+' cm²';
+    }).catch(function(){
+      populateSheetSelect();  // still expose "自訂尺寸…" even with no backend
+      el.textContent='（後端未連線 — 標準原紙板清單/標準品/門檻設定皆無法讀取，僅「自訂尺寸」可用；上傳設計圖與入庫仍需要後端連線）';
+    });
+  }
+
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+  function polygonArea(pts){ var a=0; for(var i=0;i<pts.length;i++){ var j=(i+1)%pts.length; a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y; } return Math.abs(a/2); }
+  function bbox(pts){
+    var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    pts.forEach(function(p){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
+    return {minX:minX,maxX:maxX,minY:minY,maxY:maxY,length:maxX-minX,width:maxY-minY};
+  }
+  function svgFor(pts, box){
+    var size=100, pad=6;
+    var w=box.length||1, h=box.width||1;
+    var scale=Math.min((size-2*pad)/w, (size-2*pad)/h);
+    var cx=size/2, cy=size/2, midX=(box.minX+box.maxX)/2, midY=(box.minY+box.maxY)/2;
+    var d=pts.map(function(p,i){ var x=cx+(p.x-midX)*scale, y=cy+(p.y-midY)*scale; return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1); }).join(' ')+'Z';
+    return '<svg viewBox="0 0 '+size+' '+size+'"><path d="'+d+'" fill="#F3E3D2" stroke="#211D16" stroke-width="1.4"/></svg>';
+  }
+  function randomLocation(){ var rows=['A','B','C','D']; return rows[Math.floor(Math.random()*rows.length)]+'-'+Math.floor(rnd(1,12)); }
+
+  function renderInventory(){
+    var grid=document.getElementById('inventoryGrid');
+    if(inventory.length===0){ grid.innerHTML='<p class="empty-note">目前庫存是空的，先上傳產品設計圖並完成入庫。</p>'; }
+    else{
+      grid.innerHTML=inventory.slice().reverse().map(function(it){
+        return '<div class="card">'+svgFor(it.pts,it.box)+
+          '<div class="dims">'+it.area+' cm² · '+it.length+'×'+it.width+' cm</div>'+
+          '<div class="loc">儲位 '+it.location+(it.source==='photo'?' · 實拍':it.source==='vector'?' · CAD':' · 模擬')+(it.material?' · '+it.material:'')+(it.scrapId?' · '+it.scrapId:'')+(it.productAreaCm2!=null?' · 成品'+it.productAreaCm2+'cm²×'+it.productFitCount:'')+'</div></div>';
+      }).join('');
+    }
+    document.getElementById('countKept').textContent=inventory.length;
+    document.getElementById('countDiscard').textContent=discardCount;
+  }
+
+  function hideSapExportForm(){
+    pendingSapExport=null;
+    document.getElementById('sapExportForm').style.display='none';
+    document.getElementById('sapExportEmpty').style.display='block';
+    document.getElementById('sapExportEmpty').textContent='尚無可匯出的餘料 — 請先完成上方入庫。';
+    document.getElementById('sapExportResult').textContent='';
+  }
+
+  function showSapExportForm(){
+    document.getElementById('sapExportEmpty').style.display='none';
+    document.getElementById('sapExportForm').style.display='flex';
+    document.getElementById('sapScrapId').textContent=pendingSapExport.scrapId;
+    document.getElementById('sapBoardReadout').textContent=pendingSapExport.sheetName+'（'+pendingSapExport.boardLengthCm+'×'+pendingSapExport.boardWidthCm+'cm）';
+    document.getElementById('sapProductAreaReadout').textContent=pendingSapExport.productAreaCm2+' cm²';
+    document.getElementById('sapQuantity').value=1;
+    document.getElementById('sapExportResult').textContent='';
+  }
+
+  function showUploadMessage(message,isError){
+    var hint=document.getElementById('uploadHint');
+    hint.textContent=message;
+    hint.style.color=isError?'#A8432E':'var(--ink-soft)';
+    if(isError){ document.getElementById('log').textContent=message; }
+  }
+
+  function resetUploadUI(){
+    pendingTrace=null;
+    photoState.img=null; photoState.calibPts=[]; photoState.tracePts=[]; photoState.mode='calib'; photoState.scaleCmPerPx=null;
+    photoState.originalFile=null; photoState.contourMethod=null; photoState.autoContourPts=null;
+    var canvas=document.getElementById('photoCanvas');
+    canvas.style.display='none';
+    document.getElementById('photoInput').value='';
+    document.getElementById('calibRow').style.display='none';
+    document.getElementById('materialRow').style.display='none';
+    document.getElementById('materialArea').textContent='—';
+    document.getElementById('nestingReadout').textContent='—';
+    document.getElementById('productAreaReadout').textContent='—';
+    document.getElementById('productFitReadout').textContent='—';
+    document.getElementById('stockInBtn').disabled=false;
+  }
+
+  function inferKind(file){
+    var name=(file.name||'').toLowerCase();
+    var ext=name.split('.').pop()||'';
+    if(['jpg','jpeg','png','gif','bmp','webp'].indexOf(ext)!==-1) return 'image';
+    if(ext==='pdf') return 'pdf';
+    if(ext==='dxf') return 'dxf';
+    if(ext==='dwg') return 'dwg';
+    if(file.type&&file.type.indexOf('image/')===0) return 'image';
+    return 'unsupported';
+  }
+
+  function validateUpload(file){
+    var kind=inferKind(file);
+    if(kind==='unsupported'){ return { ok:false, error:'目前僅支援圖片、PDF、DXF 與 DWG。', kind:kind }; }
+    var maxBytes=kind==='image'?25*1024*1024:80*1024*1024;
+    if(file.size>maxBytes){ return { ok:false, error:'檔案過大，請縮小檔案或分批上傳。', kind:kind }; }
+    return { ok:true, kind:kind };
+  }
+
+  function readTextFile(file){
+    return new Promise(function(resolve,reject){
+      var reader=new FileReader();
+      reader.onload=function(ev){ resolve(ev.target.result); };
+      reader.onerror=function(){ reject(new Error('讀取檔案內容失敗。')); };
+      reader.readAsText(file);
+    });
+  }
+
+  function parseDxfUnits(headerText){
+    var match=headerText.match(/\$INSUNITS[\s\S]*?([\-0-9.]+)/i);
+    if(!match) return null;
+    var value=parseFloat(match[1]);
+    if(isNaN(value)) return null;
+    var unitMap={0:'unknown',1:'inch',2:'foot',3:'mile',4:'millimeter',5:'centimeter',6:'meter',7:'kilometer',8:'microinch',9:'mil',10:'yard',11:'angstrom'};
+    return { value:value, label:unitMap[value]||'unknown' };
+  }
+
+  function buildPairs(sectionText){
+    var lines=(sectionText||'').replace(/\r/g,'').split('\n');
+    var pairs=[];
+    for(var i=0;i<lines.length;i+=2){
+      var code=parseInt(lines[i],10);
+      if(isNaN(code)) continue;
+      var value=(lines[i+1]||'').trim();
+      pairs.push({code:code, value:value});
+    }
+    return pairs;
+  }
+
+  function parseDxfText(text){
+    var headerMatch=text.match(/SECTION[\s\S]*?HEADER([\s\S]*?)ENDSEC/i);
+    var entitiesMatch=text.match(/SECTION[\s\S]*?ENTITIES([\s\S]*?)ENDSEC/i);
+    var headerText=headerMatch?headerMatch[1]:'';
+    var entitiesText=entitiesMatch?entitiesMatch[1]:'';
+    var units=parseDxfUnits(headerText);
+    var pairs=buildPairs(entitiesText);
+    var shapes=[];
+    var current=null;
+    var polyline=null;
+
+    function flushPolyline(){
+      if(polyline && polyline.points && polyline.points.length>=3){
+        shapes.push({ points:polyline.points.slice(), closed:polyline.closed });
+      }
+      polyline=null;
+    }
+
+    for(var i=0;i<pairs.length;i++){
+      var pair=pairs[i];
+      if(pair.code===0){
+        if(current){
+          if(current.type==='LWPOLYLINE' && current.points && current.points.length){
+            shapes.push({ points:current.points.slice(), closed:current.closed });
+          }
+        }
+        current={ type:pair.value };
+        if(pair.value==='POLYLINE'){ polyline={ points:[], closed:false }; }
+      }
+      else if(current){
+        if(current.type==='LWPOLYLINE'){
+          if(pair.code===70){ current.closed=(parseInt(pair.value,10)===1); }
+          else if(pair.code===10){ current.x=parseFloat(pair.value); }
+          else if(pair.code===20){
+            if(!isNaN(current.x)){
+              current.points.push({ x:current.x, y:parseFloat(pair.value) });
+            }
+          }
+        }
+        else if(current.type==='POLYLINE' && polyline){
+          if(pair.code===70){ polyline.closed=(parseInt(pair.value,10)===1); }
+        }
+        else if(current.type==='VERTEX' && polyline){
+          if(pair.code===10){ polyline.x=parseFloat(pair.value); }
+          else if(pair.code===20){
+            if(!isNaN(polyline.x)){ polyline.points.push({x:polyline.x,y:parseFloat(pair.value)}); }
+          }
+        }
+      }
+      if(pair.code===0 && pair.value==='SEQEND'){ flushPolyline(); }
+      if(pair.code===0 && pair.value==='VERTEX'){ current={ type:'VERTEX' }; }
+    }
+    flushPolyline();
+    return { units:units, shapes:shapes };
+  }
+
+  function computeVectorMeasurement(parsed, scaleCmPerUnit){
+    if(!parsed.shapes || !parsed.shapes.length){ throw new Error('DXF 內沒有可計算的閉合多邊形。'); }
+    var totalArea=0;
+    var allPoints=[];
+    parsed.shapes.forEach(function(shape){
+      var area=polygonArea(shape.points);
+      totalArea+=area;
+      shape.points.forEach(function(p){ allPoints.push(p); });
+    });
+    var scaledArea=totalArea*Math.pow(scaleCmPerUnit,2);
+    var box=bbox(allPoints);
+    return { area:Math.round(scaledArea), length:Math.round(box.length*scaleCmPerUnit), width:Math.round(box.width*scaleCmPerUnit), box:box, pts:allPoints.slice(0, Math.min(200,allPoints.length)) };
+  }
+
+  function handleImageUpload(file){
+    resetUploadUI();
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.getElementById('photoCanvas');
+        var maxW=560, scale=Math.min(1,maxW/img.width);
+        canvas.width=Math.round(img.width*scale);
+        canvas.height=Math.round(img.height*scale);
+        canvas.style.display='block';
+        photoState.img=img; photoState.calibPts=[]; photoState.tracePts=[]; photoState.mode='calib'; photoState.scaleCmPerPx=null;
+        photoState.originalFile=file; photoState.contourMethod=null; photoState.autoContourPts=null;
+        document.getElementById('calibRow').style.display='none';
+        document.getElementById('materialRow').style.display='none';
+        document.getElementById('materialArea').textContent='—';
+        showUploadMessage('第 1 步：在照片中沿著一格參考格線的邊，點兩下做比例校正。', false);
+        drawPhotoCanvas();
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDxfUpload(file){
+    resetUploadUI();
+    var scaleCmPerUnit=1;
+    document.getElementById('calibRow').style.display='none';
+    showUploadMessage('DXF 解析中…', false);
+    var fd=new FormData();
+    fd.append('dxf', file);
+    fd.append('scale_cm_per_unit', String(scaleCmPerUnit));
+    apiPostForm('/api/analyze-dxf', fd).then(function(res){
+      var data=res.data;
+      if(!data || !data.ok){ throw new Error((data&&data.warning)||'DXF 解析失敗'); }
+      showUploadMessage('DXF 已由後端解析成功（支援直線與圓弧圖元）。'+(data.warning?' '+data.warning:''), false);
+      var dxfBox=bbox(data.polygon_cm);
+      var meta={ source:'vector', sourceLabel:'DXF 向量', sourceFilename:file.name,
+                 contourMethod:'DXF向量解析', length:Math.round(dxfBox.length), width:Math.round(dxfBox.width),
+                 pts:data.polygon_cm, box:dxfBox };
+      return evaluateAndPreparePending(data.polygon_cm, meta);
+    }).catch(function(err){
+      showUploadMessage('後端無法連線或解析失敗（'+err.message+'），改用簡易本地解析（僅支援直線多邊形，且無法計算可容納標準品數量）。', true);
+      handleDxfUploadLocalFallback(file, scaleCmPerUnit);
+    });
+  }
+
+  function handleDxfUploadLocalFallback(file, scaleCmPerUnit){
+    readTextFile(file).then(function(text){
+      try{
+        var parsed=parseDxfText(text);
+        var measurement=computeVectorMeasurement(parsed, scaleCmPerUnit);
+        var log=document.getElementById('log');
+        pendingTrace=null;
+        document.getElementById('materialRow').style.display='flex';
+        document.getElementById('productAreaReadout').textContent=measurement.area+' cm²';
+        document.getElementById('productFitReadout').textContent='—';
+        document.getElementById('materialArea').textContent='—';
+        document.getElementById('nestingReadout').textContent='後端未連線，無法計算餘料面積與可容納數量';
+        document.getElementById('stockInBtn').disabled=true;
+        log.textContent='DXF(本地解析)：成品面積 '+measurement.area+' cm²（僅供預覽）— 後端未連線，無法反向排版計算餘料面積，無法入庫。';
+      } catch(err){
+        showUploadMessage('本地 DXF 解析也失敗：'+err.message, true);
+      }
+    }).catch(function(err){
+      showUploadMessage('讀取 DXF 檔案失敗：'+err.message, true);
+    });
+  }
+
+  function evaluateAndPreparePending(polygonCm, meta){
+    var log=document.getElementById('log');
+    var materialRow=document.getElementById('materialRow');
+    var materialArea=document.getElementById('materialArea');
+    var nestingReadout=document.getElementById('nestingReadout');
+    var productAreaReadout=document.getElementById('productAreaReadout');
+    var productFitReadout=document.getElementById('productFitReadout');
+    var stockInBtn=document.getElementById('stockInBtn');
+    var sheet=getSelectedSheet();
+    if(!sheet){
+      showUploadMessage('請先選擇標準原紙板尺寸，再上傳產品設計圖。', true);
+      pendingTrace=null;
+      return Promise.resolve();
+    }
+    log.textContent='評估中…';
+    return apiPostJson('/api/evaluate', { polygon_cm: polygonCm, sheet: sheet }).then(function(res){
+      var data=res.data;
+      if(!data || data.ok===false){ throw new Error((data&&data.warning)||'評估失敗'); }
+
+      if(data.reason==='product_exceeds_sheet'){
+        pendingTrace=null;
+        materialRow.style.display='none';
+        log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm² — 超過所選原紙板（'+sheet.name+'）尺寸，無法排版，請改選更大的原紙板或確認設計圖。';
+        renderInventory();
+        return;
+      }
+
+      if(!data.passes_area_threshold){
+        discardCount++;
+        log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 低於門檻 '+data.area_threshold_cm2+' cm²，直接丟棄。';
+        pendingTrace=null;
+        materialRow.style.display='none';
+        materialArea.textContent='—';
+        nestingReadout.textContent='—';
+        renderInventory();
+        return;
+      }
+
+      var fitsText=Object.keys(data.nesting).map(function(id){ return id+': '+data.nesting[id].fits+' 件'; }).join(' / ');
+      nestingReadout.textContent=(fitsText||'—')+'　判定：'+(data.qualifies?'合格':'丟棄');
+      productAreaReadout.textContent=data.product_area_cm2+' cm²';
+      productFitReadout.textContent=data.product_fit_count+' 個';
+      materialArea.textContent=data.area_cm2+' cm²';
+      materialRow.style.display='flex';
+      stockInBtn.disabled=!data.qualifies;
+      if(data.qualifies){
+        var leftoverBox=bbox(data.leftover_polygon_cm);
+        pendingTrace=Object.assign({
+          area:data.area_cm2, polygonCm:polygonCm, evaluateResult:data, sheet:sheet,
+          leftoverPts:data.leftover_polygon_cm, leftoverBox:leftoverBox
+        }, meta);
+        log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 達門檻且可排入標準品，請選擇材質後按「入庫」。';
+      } else {
+        pendingTrace=null;
+        log.textContent=meta.sourceLabel+'：餘料面積 '+data.area_cm2+' cm² 達門檻，但無法排入任何標準品，判定丟棄。';
+      }
+    }).catch(function(err){
+      log.textContent='評估失敗：'+err.message;
+    });
+  }
+
+  function handlePdfUpload(file){
+    resetUploadUI();
+    showUploadMessage('PDF 已收到；此版本先保留 PDF 入口，並以提示方式引導使用者改用照片或 DXF 進行量測。', false);
+    document.getElementById('log').textContent='PDF 已收到，將以說明模式處理。若需要精確量測，建議先轉為 DXF 或圖片後再上傳。';
+  }
+
+  function handleDwgUpload(file){
+    resetUploadUI();
+    showUploadMessage('DWG 需要先轉成 DXF 或 PDF 才能在這個流程內計算面積。', true);
+    document.getElementById('log').textContent='DWG 需先由外部轉檔工具轉為 DXF 或 PDF，再上傳。';
+  }
+
+  function drawPhotoCanvas(){
+    var canvas=document.getElementById('photoCanvas');
+    var ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(photoState.img,0,0,canvas.width,canvas.height);
+    if(photoState.calibPts.length){
+      photoState.calibPts.forEach(function(p){ ctx.beginPath(); ctx.fillStyle='#C97A3B'; ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fill(); });
+      if(photoState.calibPts.length===2){
+        ctx.beginPath(); ctx.moveTo(photoState.calibPts[0].x,photoState.calibPts[0].y); ctx.lineTo(photoState.calibPts[1].x,photoState.calibPts[1].y);
+        ctx.strokeStyle='#C97A3B'; ctx.lineWidth=2; ctx.stroke();
+      }
+    }
+    if(photoState.autoContourPts && photoState.autoContourPts.length){
+      var ac=photoState.autoContourPts;
+      ctx.beginPath(); ctx.moveTo(ac[0].x,ac[0].y);
+      ac.forEach(function(p,i){ if(i>0) ctx.lineTo(p.x,p.y); });
+      ctx.closePath();
+      ctx.strokeStyle='#C97A3B'; ctx.lineWidth=2.5; ctx.setLineDash([]); ctx.stroke();
+    }
+    if(photoState.tracePts.length){
+      ctx.beginPath(); ctx.moveTo(photoState.tracePts[0].x,photoState.tracePts[0].y);
+      photoState.tracePts.forEach(function(p,i){ if(i>0) ctx.lineTo(p.x,p.y); });
+      ctx.strokeStyle='#211D16'; ctx.lineWidth=2; ctx.setLineDash([5,4]); ctx.stroke(); ctx.setLineDash([]);
+      photoState.tracePts.forEach(function(p){ ctx.beginPath(); ctx.fillStyle='#211D16'; ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill(); });
+    }
+  }
+
+  document.getElementById('sheetSelect').addEventListener('change', function(){
+    var isCustom=this.value==='custom';
+    document.getElementById('customSheetLengthField').style.display=isCustom?'flex':'none';
+    document.getElementById('customSheetWidthField').style.display=isCustom?'flex':'none';
+  });
+
+  document.getElementById('photoInput').addEventListener('change', function(e){
+    var file=e.target.files[0];
+    if(!file) return;
+    if(!getSelectedSheet()){
+      showUploadMessage('請先選擇標準原紙板尺寸，再上傳產品設計圖。', true);
+      this.value='';
+      return;
+    }
+    var validation=validateUpload(file);
+    if(!validation.ok){
+      showUploadMessage(validation.error,true);
+      this.value='';
+      return;
+    }
+    if(validation.kind==='image'){ handleImageUpload(file); }
+    else if(validation.kind==='dxf'){ handleDxfUpload(file); }
+    else if(validation.kind==='pdf'){ handlePdfUpload(file); }
+    else if(validation.kind==='dwg'){ handleDwgUpload(file); }
+  });
+
+  document.getElementById('photoCanvas').addEventListener('click', function(e){
+    var rect=this.getBoundingClientRect();
+    var scaleX=this.width/rect.width, scaleY=this.height/rect.height;
+    var x=(e.clientX-rect.left)*scaleX, y=(e.clientY-rect.top)*scaleY;
+    if(photoState.mode==='calib'){
+      if(photoState.calibPts.length<2) photoState.calibPts.push({x:x,y:y});
+      if(photoState.calibPts.length===2) document.getElementById('calibRow').style.display='flex';
+    }
+    drawPhotoCanvas();
+  });
+
+  document.getElementById('calibConfirm').addEventListener('click', function(){
+    var cm=parseFloat(document.getElementById('calibCm').value)||0;
+    if(cm<=0 || photoState.calibPts.length<2) return;
+    var dx=photoState.calibPts[1].x-photoState.calibPts[0].x, dy=photoState.calibPts[1].y-photoState.calibPts[0].y;
+    var pxDist=Math.sqrt(dx*dx+dy*dy);
+    photoState.scaleCmPerPx=cm/pxDist;
+    document.getElementById('calibRow').style.display='none';
+    runAutoDetect();
+  });
+
+  function runAutoDetect(){
+    var canvas=document.getElementById('photoCanvas');
+    if(!photoState.originalFile){
+      showUploadMessage('找不到原始照片檔案，請重新上傳。', true);
+      return;
+    }
+    showUploadMessage('偵測中…自動辨識輪廓，請稍候。', false);
+    var fd=new FormData();
+    fd.append('image', photoState.originalFile);
+    fd.append('display_width', String(canvas.width));
+    fd.append('display_height', String(canvas.height));
+    apiPostForm('/api/analyze-photo', fd).then(function(res){
+      var data=res.data;
+      if(data && data.ok){
+        photoState.autoContourPts=data.contour_px;
+        photoState.tracePts=data.contour_px.map(function(p){ return {x:p.x, y:p.y}; });
+        photoState.contourMethod='自動偵測';
+        drawPhotoCanvas();
+        var confPct=Math.round((data.confidence||0)*100);
+        showUploadMessage('自動偵測完成（信心 '+confPct+'%）'+(data.warning?'，'+data.warning:'')+'，已自動採用偵測輪廓，評估中…', false);
+        finishTrace();
+      } else {
+        showUploadMessage('自動偵測失敗（'+((data&&data.warning)||'未知原因')+'），請改用光線均勻、背景乾淨的照片重新上傳再試一次。', true);
+      }
+    }).catch(function(err){
+      showUploadMessage('無法連線後端進行自動偵測（'+err.message+'），請稍後重新上傳再試一次。', true);
+    });
+  }
+
+  function finishTrace(){
+    if(photoState.tracePts.length<3){ showUploadMessage('偵測到的輪廓點數不足，請重新上傳照片再試一次。', true); return; }
+    var box=bbox(photoState.tracePts);
+    var s=photoState.scaleCmPerPx;
+    var polygonCm=photoState.tracePts.map(function(p){ return {x:p.x*s, y:p.y*s}; });
+    var meta={ source:'photo', sourceLabel:'實拍照片',
+               sourceFilename:(photoState.originalFile&&photoState.originalFile.name)||'',
+               contourMethod:photoState.contourMethod||'自動偵測',
+               length:Math.round(box.length*s), width:Math.round(box.width*s),
+               pts:photoState.tracePts, box:box };
+    evaluateAndPreparePending(polygonCm, meta);
+    photoState.tracePts=[];
+    drawPhotoCanvas();
+  }
+
+  document.getElementById('stockInBtn').addEventListener('click', function(){
+    if(!pendingTrace || !pendingTrace.polygonCm){
+      document.getElementById('log').textContent='目前沒有可入庫的評估結果（可能後端未連線）。';
+      return;
+    }
+    var material=document.getElementById('materialSelect').value;
+    var log=document.getElementById('log');
+    log.textContent='入庫中…';
+    apiPostJson('/api/stock-in', {
+      polygon_cm: pendingTrace.polygonCm,
+      sheet: pendingTrace.sheet,
+      material: material,
+      source_type: pendingTrace.source==='vector' ? 'dxf' : (pendingTrace.source==='photo' ? 'image' : 'manual'),
+      contour_method: pendingTrace.contourMethod || '自動偵測',
+      source_filename: pendingTrace.sourceFilename || '',
+      batch_no: ''
+    }).then(function(res){
+      var data=res.data;
+      if(!data || !data.ok){
+        log.textContent='入庫失敗：'+((data&&data.reason)||(data&&data.warning)||'未知錯誤');
+        return;
+      }
+      var item={
+        area:pendingTrace.area, length:Math.round(pendingTrace.leftoverBox.length), width:Math.round(pendingTrace.leftoverBox.width),
+        location:randomLocation(), pts:pendingTrace.leftoverPts, box:pendingTrace.leftoverBox,
+        source:pendingTrace.source||'photo', material:material, scrapId:data.scrap_id,
+        productAreaCm2:pendingTrace.evaluateResult.product_area_cm2, productFitCount:pendingTrace.evaluateResult.product_fit_count
+      };
+      inventory.push(item);
+      log.textContent='已入庫：'+data.scrap_id+' · 餘料面積 '+item.area+' cm² · 材質 '+material+' · 儲位 '+item.location+'。';
+      pendingSapExport={
+        scrapId:data.scrap_id,
+        boardLengthCm:pendingTrace.sheet.length_cm, boardWidthCm:pendingTrace.sheet.width_cm,
+        sheetName:pendingTrace.sheet.name,
+        productAreaCm2:pendingTrace.evaluateResult.product_area_cm2,
+        scrapLengthCm:Math.round(pendingTrace.leftoverBox.length*100)/100,
+        scrapWidthCm:Math.round(pendingTrace.leftoverBox.width*100)/100
+      };
+      showSapExportForm();
+      pendingTrace=null;
+      document.getElementById('materialRow').style.display='none';
+      document.getElementById('materialArea').textContent='—';
+      document.getElementById('nestingReadout').textContent='—';
+      document.getElementById('productAreaReadout').textContent='—';
+      document.getElementById('productFitReadout').textContent='—';
+      renderInventory();
+    }).catch(function(err){
+      log.textContent='無法連線後端寫入資料庫（'+err.message+'）。';
+    });
+  });
+
+  document.getElementById('sapExportBtn').addEventListener('click', function(){
+    if(!pendingSapExport) return;
+    var matnr=document.getElementById('sapMatnrSelect').value;
+    var quantity=parseInt(document.getElementById('sapQuantity').value,10)||1;
+    var resultEl=document.getElementById('sapExportResult');
+    var exportBtn=document.getElementById('sapExportBtn');
+    resultEl.textContent='匯出中…';
+    exportBtn.disabled=true;
+    apiPostJson('/api/sap/export/'+encodeURIComponent(pendingSapExport.scrapId), {
+      matnr: matnr,
+      board_length_cm: pendingSapExport.boardLengthCm,
+      board_width_cm: pendingSapExport.boardWidthCm,
+      product_area_cm2: pendingSapExport.productAreaCm2,
+      quantity: quantity,
+      scrap_length_cm: pendingSapExport.scrapLengthCm,
+      scrap_width_cm: pendingSapExport.scrapWidthCm
+    }).then(function(res){
+      var data=res.data;
+      exportBtn.disabled=false;
+      if(data && data.ok){
+        resultEl.textContent='匯出成功 — 餘料面積 '+data.remnant_area+' cm² · 批次號 '+(data.batch||'（尚未回傳）')+' · 儲位分區 '+(data.bin_zone||'（尚未回傳）')+(data.message?'（'+data.message+'）':'');
+        hideSapExportForm();
+      } else {
+        resultEl.textContent='匯出失敗：'+((data&&data.error)||'未知錯誤');
+      }
+    }).catch(function(err){
+      exportBtn.disabled=false;
+      resultEl.textContent='無法連線後端（'+err.message+'）。';
+    });
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function(){
+    inventory=[]; discardCount=0;
+    document.getElementById('log').textContent='已重設。';
+    resetUploadUI();
+    hideSapExportForm();
+    document.getElementById('uploadHint').textContent='第 1 步：先選擇標準原紙板尺寸，再上傳產品設計圖（照片或 CAD 檔案）；照片流程會先做比例校正，DXF 會直接用向量座標計算面積。';
+    renderInventory();
+  });
+
+  renderInventory();
+  populateSheetSelect();  // "自訂尺寸…" available immediately, before/without a backend response
+  loadBackendInfo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(node --check /private/tmp/claude-501/-Users-jerrywu-Downloads-NiggaHorse/2612a3a6-a589-4033-b1ed-0ceaa680b244/scratchpad/script.js)",
+      "WebFetch(domain:www.taiwanhoneycomb.com.tw)",
+      "Bash(curl -sL -o /private/tmp/claude-501/-Users-jerrywu-Downloads-NiggaHorse/2612a3a6-a589-4033-b1ed-0ceaa680b244/scratchpad/th_logo.gif \"http://www.taiwanhoneycomb.com.tw/image/index/logo1_s1.gif\" -A \"Mozilla/5.0\"2)",
+      "Bash(md5 *)"
+    ]
+  }
+}

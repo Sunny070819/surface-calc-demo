@@ -1,0 +1,4 @@
+[
+  { "id": "SHEET-1", "name": "標準原紙板 120x90", "length_cm": 120.0, "width_cm": 90.0, "area_cm2": 10800.0 },
+  { "id": "SHEET-2", "name": "標準原紙板 240x120", "length_cm": 240.0, "width_cm": 120.0, "area_cm2": 28800.0 }
+]

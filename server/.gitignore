@@ -4,3 +4,9 @@ __pycache__/
 uploads/
 data/
 .env
+sap_config.json
+
+# PyInstaller packaging output (built locally, not part of the Render deploy)
+build/
+dist/
+*.spec

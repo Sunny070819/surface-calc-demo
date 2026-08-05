@@ -4,6 +4,7 @@ single process on a single port with no CORS friction; flask-cors is still
 enabled as a fallback for the (unlikely) case someone opens the HTML via file://.
 """
 
+import json
 import os
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -237,8 +238,30 @@ def sap_export_simple_route(scrap_id):
     if not quantity:
         return jsonify({"ok": False, "error": "缺少 quantity（數量），請提供後再送出。"}), 400
 
+    # SAP's handler requires length/width even on this simplified path (confirmed
+    # against the real ICF endpoint: a call without them returns 400 "length and
+    # width must be > 0"). The frontend sends the leftover's own measured
+    # scrap_length_cm/scrap_width_cm; if a caller omits them, fall back to the
+    # dimensions already recorded at stock-in time rather than failing outright.
+    length_cm = data.get("scrap_length_cm")
+    width_cm = data.get("scrap_width_cm")
+    if not length_cm or not width_cm:
+        shape_desc = json.loads(record.get("形狀描述/輪廓座標") or "{}")
+        length_cm = length_cm or shape_desc.get("length_cm")
+        width_cm = width_cm or shape_desc.get("width_cm")
+    if not length_cm or not width_cm:
+        return jsonify({"ok": False, "error": "缺少 scrap_length_cm/scrap_width_cm（餘料長寬），請提供後再送出。"}), 400
+
+    # Same fallback pattern as /api/sap/export/<scrap_id>: prefer what the
+    # caller sends, fall back to the value already recorded at stock-in time.
+    area_cm2 = data.get("scrap_area_cm2") or record.get("總面積(cm²)")
+    if not area_cm2:
+        return jsonify({"ok": False, "error": "缺少 scrap_area_cm2（餘料面積），請提供後再送出。"}), 400
+    plant = data.get("plant") or "2604"
+    zone = data.get("zone")
+
     try:
-        result = sap_client.post_remnant_simple(matnr, sloc, quantity)
+        result = sap_client.post_remnant_simple(matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant, zone)
     except sap_client.SapConfigError as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

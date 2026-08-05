@@ -221,22 +221,65 @@ def post_remnant(*, matnr, board_length_cm, board_width_cm, product_area_cm2, sc
         }
 
 
-def post_remnant_simple(matnr, sloc, quantity):
+def post_remnant_simple(matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None):
     """A second, deliberately independent path to the same /sap/bc/zai_dim
-    endpoint: no board/product-area fields at all, just matnr/sloc/quantity.
-    Reuses only the generic, payload-shape-agnostic bits of post_remnant()
-    above (_require_config, FRIENDLY_ERRORS) -- it must never be merged with
-    or made to share logic with post_remnant() itself, and post_remnant() must
-    never be modified on this function's account. The two payloads/response
-    contracts are expected to evolve independently.
+    endpoint: no board/product-area fields at all, just
+    matnr/sloc/quantity/length/width/area/plant/zone. Reuses only the generic,
+    payload-shape-agnostic bits of post_remnant() above (_require_config,
+    FRIENDLY_ERRORS) -- it must never be merged with or made to share logic
+    with post_remnant() itself, and post_remnant() must never be modified on
+    this function's account. The two payloads/response contracts are expected
+    to evolve independently.
 
-    Returns {"ok": bool, "http_status": int|None, "sap_status": "S"|"E"|None,
-    "matdoc": str|None, "matdoc_year": str|None, "message": str|None,
-    "error": str|None, "payload": dict}.
+    length_cm/width_cm/area_cm2 are required (not optional the way
+    post_remnant's scrap_length_cm/scrap_width_cm are): the ABAP handler
+    behind this same endpoint rejects a call with no length/width ("length
+    and width must be > 0"), confirmed empirically against the real ICF
+    endpoint on 2026-08-05.
+
+    zone is left unset (not defaulted to matnr) unless the caller overrides
+    it: the ABAP handler derives zone from matnr's -FR/-WP/-RC suffix itself
+    when zone is blank/absent, always producing the literal "SCRAP-FR"/
+    "SCRAP-WP"/"SCRAP-RC" regardless of which pricing-tier prefix matnr
+    actually uses (SBED and CUBE each stock all three materials -- zone/
+    material and sloc/destination are independent axes, per the warehouse
+    structure confirmed 2026-08-06).
+
+    matnr's prefix has moved twice, both times on 2026-08-06, chasing a
+    working combination of "zero cost" + "doesn't get stuck on a SAP-side
+    gap": SCRAP2-FR/WP/RC (UNBW, zero-cost) kept failing "Accounting data
+    not yet maintained" (M7090) -- SAP requires MBEW for that plant/
+    valuation-area combo, never completed. SCRAP-FR/WP/RC (ROH, real cost)
+    was tried next; posting to SBED then hung indefinitely SAP-side (never
+    root-caused) even after the storage-location extension suspected as the
+    cause. Current choice, SCRAP3-FR/WP/RC: valuated with standard price 0,
+    so it has MBEW (no M7090) and doesn't hang like SCRAP-* did, but still
+    posts a $0-valued Accounting Document once its OBYC account-
+    determination gap is fixed SAP-side -- accepted as a deliberate
+    trade-off (cost = 0 preserved, "no Accounting Document at all" is not).
+
+    Returns {"ok": bool, "http_status": int|None, "log_ok": bool|None,
+    "posting_ok": bool|None, "matdoc": str|None, "matdoc_year": str|None,
+    "batch": str|None, "bin_zone": str|None, "message": str|None,
+    "error": str|None, "payload": dict}. "ok" mirrors "posting_ok", not the
+    response's "status" key -- ABAP's "status" is unconditionally "S"
+    whenever HANDLE_REQUEST reaches the end of the method (see the parsing
+    code below for why).
     """
     _require_config()
 
-    payload = {"matnr": str(matnr), "sloc": str(sloc), "quantity": str(quantity)}
+    payload = {
+        "matnr": str(matnr), "sloc": str(sloc), "quantity": str(quantity),
+        "plant": str(plant) if plant else "2604",
+    }
+    # Deliberately omitted (not defaulted to matnr) when not overridden: the
+    # ABAP handler derives zone from matnr's SCRAP2-FR/WP/RC suffix itself
+    # when zone is blank/absent. Defaulting it to matnr here (as post_remnant()
+    # does for its own, differently-namespaced SCRAP-FR/WP/RC materials) would
+    # send the SCRAP2-* matnr verbatim as zone, short-circuiting that
+    # derivation and posting the wrong zone.
+    if zone:
+        payload["zone"] = str(zone)
 
     def _error(*, http_status=None, sap_status=None, error):
         return {
@@ -244,6 +287,24 @@ def post_remnant_simple(matnr, sloc, quantity):
             "matdoc": None, "matdoc_year": None, "message": None,
             "error": error, "payload": payload,
         }
+
+    # Same local-precheck pattern as post_remnant(): don't spend a round trip
+    # (and burn toward the retry/lockout budget) to discover locally-detectable
+    # bad input.
+    for field_name, value in (("length", length_cm), ("width", width_cm), ("area", area_cm2)):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return _error(error=f"{field_name} 必須是數值，收到的是：{value!r}（未送出，本機先擋下）")
+        if parsed <= 0:
+            return _error(error=f"{field_name} 必須大於 0，收到的是：{value!r}（未送出，本機先擋下）")
+    payload["length"] = str(length_cm)
+    payload["width"] = str(width_cm)
+    # Key name matches ty_input's existing "precomputed_area" field (already
+    # used by post_remnant()) rather than a new "area" key -- ABAP doesn't
+    # need a new field for this one, just to start reading it in the simple
+    # flow too.
+    payload["precomputed_area"] = str(area_cm2)
 
     attempt = 0
     while True:
@@ -278,14 +339,25 @@ def post_remnant_simple(matnr, sloc, quantity):
         except ValueError:
             return _error(http_status=resp.status_code, error="SAP 回應不是有效的 JSON，請確認服務狀態。")
 
-        sap_status = data.get("status")
+        # "status" is unconditionally "S" in ABAP's current response (it only
+        # reflects that HANDLE_REQUEST reached the end of the method, not
+        # whether the Z_SCRAP_CLASSIFY posting itself succeeded) -- posting_ok
+        # is the real success signal, confirmed against the real ICF endpoint
+        # on 2026-08-06 (a call that only wrote ZAI_DIM_LOG and failed to post
+        # still came back with "status":"S"). log_ok is kept alongside it so a
+        # caller can tell "dimension recorded but posting failed" apart from
+        # "nothing succeeded at all".
+        posting_ok = data.get("posting_ok")
         return {
-            "ok": sap_status == "S",
+            "ok": bool(posting_ok),
             "http_status": resp.status_code,
-            "sap_status": sap_status,
+            "log_ok": data.get("log_ok"),
+            "posting_ok": posting_ok,
             "matdoc": data.get("matdoc"),
             "matdoc_year": data.get("matdoc_year"),
+            "batch": data.get("batch"),
+            "bin_zone": data.get("bin_zone"),
             "message": data.get("message"),
-            "error": None if sap_status == "S" else (data.get("message") or f"SAP 回傳失敗狀態（status={sap_status}）。"),
+            "error": None if posting_ok else (data.get("message") or "SAP 過帳失敗（posting_ok 為 false）。"),
             "payload": payload,
         }

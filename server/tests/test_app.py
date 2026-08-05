@@ -5,6 +5,7 @@ from openpyxl import load_workbook
 
 import app as app_module
 import config
+import excel_db
 import sap_client
 
 
@@ -349,8 +350,11 @@ def test_sap_export_simple_success_calls_post_remnant_simple_and_logs(monkeypatc
 
     captured = {}
 
-    def fake_post_remnant_simple(matnr, sloc, quantity):
-        captured.update(matnr=matnr, sloc=sloc, quantity=quantity)
+    def fake_post_remnant_simple(matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None):
+        captured.update(
+            matnr=matnr, sloc=sloc, quantity=quantity, length_cm=length_cm, width_cm=width_cm,
+            area_cm2=area_cm2, plant=plant, zone=zone,
+        )
         return {
             "ok": True, "http_status": 200, "sap_status": "S",
             "matdoc": "4900012345", "matdoc_year": "2026", "message": "OK",
@@ -361,18 +365,84 @@ def test_sap_export_simple_success_calls_post_remnant_simple_and_logs(monkeypatc
 
     resp = client().post(
         "/api/sap/export-simple/SCRAP-00001",
-        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+        json={
+            "matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9",
+            "scrap_length_cm": 50, "scrap_width_cm": 30, "scrap_area_cm2": 1234,
+        },
     )
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["ok"] is True
     assert body["matdoc"] == "4900012345"
 
-    assert captured == {"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"}
+    assert captured == {
+        "matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9", "length_cm": 50, "width_cm": 30,
+        "area_cm2": 1234, "plant": "2604", "zone": None,
+    }
 
     wb = load_workbook(sync_log_path)
     assert "簡化匯出紀錄" in wb.sheetnames
     assert wb["簡化匯出紀錄"].max_row == 2  # header + 1 record
+
+
+def test_sap_export_simple_missing_dims_falls_back_to_stored_record(monkeypatch, tmp_path):
+    """If the caller omits scrap_length_cm/scrap_width_cm, the route must pull
+    them from the shape data already recorded at stock-in time rather than
+    failing -- see app.py's shape_desc fallback."""
+    monkeypatch.setattr(config, "EXCEL_DB_PATH", str(tmp_path / "scrap_inventory.xlsx"))
+    client().post("/api/stock-in", json=_product_payload())
+
+    captured = {}
+
+    def fake_post_remnant_simple(matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None):
+        captured.update(length_cm=length_cm, width_cm=width_cm, area_cm2=area_cm2)
+        return {
+            "ok": True, "http_status": 200, "sap_status": "S",
+            "matdoc": "X", "matdoc_year": "2026", "message": "OK", "error": None,
+            "payload": {"matnr": matnr, "sloc": sloc, "quantity": str(quantity)},
+        }
+
+    monkeypatch.setattr(sap_client, "post_remnant_simple", fake_post_remnant_simple)
+
+    resp = client().post(
+        "/api/sap/export-simple/SCRAP-00001",
+        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+    )
+    assert resp.status_code == 200
+    assert captured["length_cm"]
+    assert captured["width_cm"]
+    # scrap_area_cm2 wasn't in the request either -- must also fall back to
+    # the record's own 總面積(cm²), same as length/width above.
+    assert captured["area_cm2"]
+
+
+def test_sap_export_simple_missing_dims_and_no_stored_record_returns_400(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "EXCEL_DB_PATH", str(tmp_path / "scrap_inventory.xlsx"))
+    client().post("/api/stock-in", json=_product_payload())
+    monkeypatch.setattr(excel_db, "get_record", lambda scrap_id, path=None: {
+        "餘料編號": scrap_id, "形狀描述/輪廓座標": None, "總面積(cm²)": None,
+    })
+
+    resp = client().post(
+        "/api/sap/export-simple/SCRAP-00001",
+        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+    )
+    assert resp.status_code == 400
+
+
+def test_sap_export_simple_missing_area_and_no_stored_area_returns_400(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "EXCEL_DB_PATH", str(tmp_path / "scrap_inventory.xlsx"))
+    client().post("/api/stock-in", json=_product_payload())
+    monkeypatch.setattr(excel_db, "get_record", lambda scrap_id, path=None: {
+        "餘料編號": scrap_id, "形狀描述/輪廓座標": json.dumps({"length_cm": 50, "width_cm": 30}),
+        "總面積(cm²)": None,
+    })
+
+    resp = client().post(
+        "/api/sap/export-simple/SCRAP-00001",
+        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+    )
+    assert resp.status_code == 400
 
 
 def test_sap_export_simple_failure_returns_502(monkeypatch, tmp_path):
@@ -380,15 +450,21 @@ def test_sap_export_simple_failure_returns_502(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "SAP_SYNC_LOG_PATH", str(tmp_path / "sap_sync_log.xlsx"))
     client().post("/api/stock-in", json=_product_payload())
 
-    monkeypatch.setattr(sap_client, "post_remnant_simple", lambda matnr, sloc, quantity: {
-        "ok": False, "http_status": 404, "sap_status": None,
-        "matdoc": None, "matdoc_year": None, "message": None,
-        "error": "料號在 SAP 查無資料", "payload": {"matnr": matnr, "sloc": sloc, "quantity": str(quantity)},
-    })
+    monkeypatch.setattr(
+        sap_client, "post_remnant_simple",
+        lambda matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None: {
+            "ok": False, "http_status": 404, "sap_status": None,
+            "matdoc": None, "matdoc_year": None, "message": None,
+            "error": "料號在 SAP 查無資料", "payload": {"matnr": matnr, "sloc": sloc, "quantity": str(quantity)},
+        },
+    )
 
     resp = client().post(
         "/api/sap/export-simple/SCRAP-00001",
-        json={"matnr": "NOT-A-REAL-MATNR", "sloc": "SBED", "quantity": "9"},
+        json={
+            "matnr": "NOT-A-REAL-MATNR", "sloc": "SBED", "quantity": "9",
+            "scrap_length_cm": 50, "scrap_width_cm": 30, "scrap_area_cm2": 1234,
+        },
     )
     assert resp.status_code == 502
     assert resp.get_json()["ok"] is False
@@ -398,14 +474,17 @@ def test_sap_export_simple_missing_sap_config_returns_500(monkeypatch, tmp_path)
     monkeypatch.setattr(config, "EXCEL_DB_PATH", str(tmp_path / "scrap_inventory.xlsx"))
     client().post("/api/stock-in", json=_product_payload())
 
-    def raise_config_error(matnr, sloc, quantity):
+    def raise_config_error(matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None):
         raise sap_client.SapConfigError("尚未設定 SAP 連線環境變數")
 
     monkeypatch.setattr(sap_client, "post_remnant_simple", raise_config_error)
 
     resp = client().post(
         "/api/sap/export-simple/SCRAP-00001",
-        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+        json={
+            "matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9",
+            "scrap_length_cm": 50, "scrap_width_cm": 30, "scrap_area_cm2": 1234,
+        },
     )
     assert resp.status_code == 500
 
@@ -423,14 +502,20 @@ def test_sap_export_simple_does_not_call_post_remnant(monkeypatch, tmp_path):
         raise AssertionError("post_remnant should not be called by the simplified route")
 
     monkeypatch.setattr(sap_client, "post_remnant", fail_if_called)
-    monkeypatch.setattr(sap_client, "post_remnant_simple", lambda matnr, sloc, quantity: {
-        "ok": True, "http_status": 200, "sap_status": "S",
-        "matdoc": "X", "matdoc_year": "2026", "message": "OK", "error": None,
-        "payload": {"matnr": matnr, "sloc": sloc, "quantity": str(quantity)},
-    })
+    monkeypatch.setattr(
+        sap_client, "post_remnant_simple",
+        lambda matnr, sloc, quantity, length_cm, width_cm, area_cm2, plant="2604", zone=None: {
+            "ok": True, "http_status": 200, "sap_status": "S",
+            "matdoc": "X", "matdoc_year": "2026", "message": "OK", "error": None,
+            "payload": {"matnr": matnr, "sloc": sloc, "quantity": str(quantity)},
+        },
+    )
 
     resp = client().post(
         "/api/sap/export-simple/SCRAP-00001",
-        json={"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"},
+        json={
+            "matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9",
+            "scrap_length_cm": 50, "scrap_width_cm": 30, "scrap_area_cm2": 1234,
+        },
     )
     assert resp.status_code == 200

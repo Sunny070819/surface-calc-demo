@@ -254,12 +254,25 @@
   var MATERIAL_TO_SAP_MATNR = {};
   MATERIAL_OPTIONS.forEach(function(opt){ MATERIAL_TO_SAP_MATNR[opt.value]=opt.matnr; });
 
-  // Dedicated material -> SAP matnr table for the new simplified export flow
-  // (exportSimplified() / /api/sap/export-simple) -- SCRAP2-* material master,
-  // deliberately kept separate from MATERIAL_OPTIONS/MATERIAL_TO_SAP_MATNR
-  // above (SCRAP-* material master, used by the original delayed-binding flow)
-  // so the two flows' matnr codes can never bleed into each other.
-  var MATERIAL_TO_SAP_MATNR_SIMPLE = { '防火':'SCRAP2-FR', '防水':'SCRAP2-WP', '再生紙':'SCRAP2-RC' };
+  // Dedicated material -> SAP matnr table for the simplified export flow
+  // (exportSimplified() / /api/sap/export-simple). History, in order:
+  //   SCRAP2-* (UNBW, zero-cost) -- abandoned 2026-08-06, kept failing
+  //     "Accounting data not yet maintained" (M7090): SAP requires MBEW for
+  //     these materials' plant/valuation-area combo, never completed.
+  //   SCRAP-* (ROH, real cost) -- abandoned same day: posting to SBED hung
+  //     indefinitely (SAP-side, cause never root-caused) even after the
+  //     storage-location extension that was suspected as the cause.
+  //   SCRAP3-* (valuated but standard price 0) -- current choice: doesn't
+  //     hit M7090 (has MBEW) and doesn't hang like SCRAP-* did. Business
+  //     decision 2026-08-06: cost = 0 is preserved, but this still posts a
+  //     $0-valued Accounting Document (an OBYC account-determination entry
+  //     is required for it to post at all) -- accepted as a deliberate
+  //     trade-off, not the original "no Accounting Document at all" rule.
+  // SAP-side prerequisite as of 2026-08-06: only SCRAP3-FR exists (and even
+  // that fails on a missing OBYC entry for its valuation class); SCRAP3-WP/RC
+  // haven't been created yet (404 Material not found) -- need MM01 (copy
+  // from SCRAP3-FR) plus the same SBED/CUBE storage-location extension.
+  var MATERIAL_TO_SAP_MATNR_SIMPLE = { '防火':'SCRAP3-FR', '防水':'SCRAP3-WP', '再生紙':'SCRAP3-RC' };
 
   function populateMaterialSelects(){
     var materialSelect=document.getElementById('materialSelect');
@@ -576,7 +589,9 @@
     item.exportResultText='匯出中…';
     renderInventory();
     apiPostJson('/api/sap/export-simple/'+encodeURIComponent(scrapId), {
-      matnr: matnr, sloc: sloc, quantity: String(item.selectedQuantity)
+      matnr: matnr, sloc: sloc, quantity: String(item.selectedQuantity),
+      scrap_length_cm: item.scrapLengthCm, scrap_width_cm: item.scrapWidthCm,
+      scrap_area_cm2: item.area
     }).then(function(res){
       var data=res.data;
       if(data && data.ok){

@@ -68,7 +68,8 @@ def append_sync_record(*, scrap_id, source_id, matnr, board_length_cm, board_wid
 # untouched by this addition.
 SIMPLE_HEADERS = [
     "同步時間", "本地餘料編號", "matnr", "sloc", "quantity",
-    "HTTP狀態碼", "SAP狀態(S/E)", "SAP回傳matdoc", "SAP回傳matdoc_year",
+    "HTTP狀態碼", "尺寸記錄成功(log_ok)", "過帳成功(posting_ok)",
+    "SAP回傳matdoc", "SAP回傳matdoc_year", "SAP回傳batch", "SAP回傳bin_zone",
     "SAP回傳message", "結果", "錯誤訊息",
 ]
 
@@ -92,8 +93,9 @@ def append_simple_sync_record(*, scrap_id, matnr, sloc, quantity, result, path=N
     row = [
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         scrap_id, matnr, sloc, quantity,
-        result.get("http_status"), result.get("sap_status"),
-        result.get("matdoc"), result.get("matdoc_year"), result.get("message"),
+        result.get("http_status"), result.get("log_ok"), result.get("posting_ok"),
+        result.get("matdoc"), result.get("matdoc_year"), result.get("batch"), result.get("bin_zone"),
+        result.get("message"),
         "成功" if result.get("ok") else "失敗",
         result.get("error") or "",
     ]

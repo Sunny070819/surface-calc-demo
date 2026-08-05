@@ -230,7 +230,7 @@ def test_post_remnant_simple_missing_config_raises(monkeypatch):
     monkeypatch.setattr(config, "SAP_ICF_USERNAME", None)
     monkeypatch.setattr(config, "SAP_ICF_PASSWORD", None)
     with pytest.raises(sap_client.SapConfigError):
-        sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "9")
+        sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "9", 50, 30, 900)
 
 
 def test_post_remnant_simple_success_builds_minimal_payload(monkeypatch):
@@ -240,32 +240,104 @@ def test_post_remnant_simple_success_builds_minimal_payload(monkeypatch):
     def fake_post(url, json, **kwargs):
         captured["url"] = url
         captured["json"] = json
-        return _FakeResponse(200, {"status": "S", "matdoc": "4900012345", "matdoc_year": "2026", "message": "OK"})
+        return _FakeResponse(200, {
+            "status": "S", "log_ok": True, "posting_ok": True,
+            "matdoc": "4900012345", "matdoc_year": "2026",
+            "batch": "0000000300", "bin_zone": "SBED", "message": "OK",
+        })
 
     monkeypatch.setattr(sap_client.requests, "post", fake_post)
-    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", 9)
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", 9, 50, 30, 900)
 
+    # "ok" mirrors posting_ok, not the (unconditionally "S") "status" key --
+    # see the comment above this parsing code in sap_client.py.
     assert result["ok"] is True
-    assert result["sap_status"] == "S"
+    assert result["log_ok"] is True
+    assert result["posting_ok"] is True
     assert result["matdoc"] == "4900012345"
     assert result["matdoc_year"] == "2026"
-    # Payload is exactly matnr/sloc/quantity -- nothing from post_remnant's
-    # much larger payload (board_length, product_area, precomputed_area, ...)
-    # leaks in here.
-    assert captured["json"] == {"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"}
-    assert result["payload"] == {"matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9"}
+    assert result["batch"] == "0000000300"
+    assert result["bin_zone"] == "SBED"
+    # Payload is exactly matnr/sloc/quantity/plant/length/width/
+    # precomputed_area -- nothing from post_remnant's larger payload
+    # (board_length, product_area, ...) leaks in here. plant defaults to
+    # "2604" when not supplied; zone is omitted entirely (not defaulted to
+    # matnr) so the ABAP handler's own SCRAP2-* -> SCRAP-* derivation runs.
+    expected_payload = {
+        "matnr": "SCRAP2-FR", "sloc": "SBED", "quantity": "9",
+        "plant": "2604",
+        "length": "50", "width": "30", "precomputed_area": "900",
+    }
+    assert captured["json"] == expected_payload
+    assert result["payload"] == expected_payload
+    assert "zone" not in captured["json"]
 
 
-def test_post_remnant_simple_non_s_status_is_failure(monkeypatch):
+def test_post_remnant_simple_plant_and_zone_can_be_overridden(monkeypatch):
+    _configure(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        sap_client.requests, "post",
+        lambda url, json, **k: (captured.update(json=json), _FakeResponse(200, {"status": "S"}))[1],
+    )
+    sap_client.post_remnant_simple("SCRAP2-FR", "SBED", 9, 50, 30, 900, plant="9999", zone="ZONE-X")
+    assert captured["json"]["plant"] == "9999"
+    assert captured["json"]["zone"] == "ZONE-X"
+
+
+def test_post_remnant_simple_non_numeric_length_rejected_before_any_http_call(monkeypatch):
+    _configure(monkeypatch)
+    calls = []
+    monkeypatch.setattr(sap_client.requests, "post", lambda *a, **k: calls.append(1))
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1", "abc", 30, 900)
+    assert result["ok"] is False
+    assert "數值" in result["error"]
+    assert calls == []
+
+
+def test_post_remnant_simple_zero_width_rejected_before_any_http_call(monkeypatch):
+    _configure(monkeypatch)
+    calls = []
+    monkeypatch.setattr(sap_client.requests, "post", lambda *a, **k: calls.append(1))
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1", 50, 0, 900)
+    assert result["ok"] is False
+    assert "大於 0" in result["error"]
+    assert calls == []
+
+
+def test_post_remnant_simple_zero_area_rejected_before_any_http_call(monkeypatch):
+    _configure(monkeypatch)
+    calls = []
+    monkeypatch.setattr(sap_client.requests, "post", lambda *a, **k: calls.append(1))
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1", 50, 30, 0)
+    assert result["ok"] is False
+    assert "大於 0" in result["error"]
+    assert calls == []
+
+
+def test_post_remnant_simple_posting_ok_false_is_failure_even_with_status_s(monkeypatch):
+    """Regression guard: ABAP's "status" key is unconditionally "S" whenever
+    HANDLE_REQUEST reaches the end of the method (it only reflects that the
+    ZAI_DIM_LOG write succeeded), even when the Z_SCRAP_CLASSIFY posting
+    itself failed -- confirmed against the real ICF endpoint on 2026-08-06,
+    where a call that only logged the dimension and never posted still came
+    back "status":"S". Reading "status" instead of "posting_ok" here would
+    silently report success for a call that never actually stocked anything
+    in SBED/CUBE."""
     _configure(monkeypatch)
     monkeypatch.setattr(
         sap_client.requests, "post",
-        lambda *a, **k: _FakeResponse(200, {"status": "E", "message": "matnr not found"}),
+        lambda *a, **k: _FakeResponse(200, {
+            "status": "S", "log_ok": True, "posting_ok": False,
+            "matdoc": None, "matdoc_year": None,
+            "message": "Accounting data not yet maintained for material 2604 SCRAP2-WP",
+        }),
     )
-    result = sap_client.post_remnant_simple("NOT-A-REAL-MATNR", "SBED", "1")
+    result = sap_client.post_remnant_simple("SCRAP2-WP", "SBED", "1", 50, 30, 900)
     assert result["ok"] is False
-    assert result["sap_status"] == "E"
-    assert result["error"] == "matnr not found"
+    assert result["log_ok"] is True
+    assert result["posting_ok"] is False
+    assert result["error"] == "Accounting data not yet maintained for material 2604 SCRAP2-WP"
 
 
 def test_post_remnant_simple_401_is_never_retried(monkeypatch):
@@ -277,7 +349,7 @@ def test_post_remnant_simple_401_is_never_retried(monkeypatch):
         return _FakeResponse(401)
 
     monkeypatch.setattr(sap_client.requests, "post", fake_post)
-    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1")
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1", 50, 30, 900)
     assert len(calls) == 1
     assert result["ok"] is False
     assert result["error"] == sap_client.FRIENDLY_ERRORS[401]
@@ -292,7 +364,7 @@ def test_post_remnant_simple_connection_error_is_retried_up_to_cap(monkeypatch):
         raise sap_client.requests.exceptions.ConnectionError("boom")
 
     monkeypatch.setattr(sap_client.requests, "post", fake_post)
-    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1")
+    result = sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "1", 50, 30, 900)
     assert result["ok"] is False
     assert len(calls) == 1 + 2
 
@@ -306,7 +378,7 @@ def test_post_remnant_simple_does_not_affect_post_remnant(monkeypatch):
         sap_client.requests, "post",
         lambda *a, **k: _FakeResponse(200, {"status": "S", "matdoc": "X", "matdoc_year": "2026"}),
     )
-    sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "9")
+    sap_client.post_remnant_simple("SCRAP2-FR", "SBED", "9", 50, 30, 900)
 
     monkeypatch.setattr(
         sap_client.requests, "post",

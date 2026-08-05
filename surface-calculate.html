@@ -194,7 +194,13 @@
         <div class="field"><label>原紙板可排入成品數</label><div class="area-readout" id="productFitReadout">—</div></div>
         <div class="field"><label>餘料面積 (cm²)</label><div class="area-readout" id="materialArea">—</div></div>
         <div class="field"><label>A/B 排列判定</label><div class="area-readout" id="nestingReadout" style="font-size:13px;">—</div></div>
-        <div class="field"><label>簡化匯出方案</label><div class="area-readout" id="simplifiedPlanReadout" style="font-size:13px;">—</div></div>
+        <div class="field"><label>建議入庫方案</label><div class="area-readout" id="simplifiedPlanReadout" style="font-size:13px;">—</div></div>
+        <div class="field"><label>選擇儲位（入庫前可調整）</label>
+          <select id="stockLocSelect" style="width:100%;">
+            <option value="A">方案 A → SBED</option>
+            <option value="B">方案 B → CUBE</option>
+          </select>
+        </div>
         <button id="stockInBtn">入庫</button>
       </div>
       <p id="backendInfo" style="font-size:12px; color:var(--ink-faint); margin:14px 0 0; font-family:var(--font-mono);"></p>
@@ -433,25 +439,42 @@
     var b=(nesting && nesting.B) || {};
     var benefitA=a.benefit != null ? a.benefit : 0;
     var benefitB=b.benefit != null ? b.benefit : 0;
+    var fitsA=Math.floor(a.fits || 0);
+    var fitsB=Math.floor(b.fits || 0);
     var selectedPlan, selectedPlanTied=false;
     if(benefitA === benefitB){ selectedPlan='A'; selectedPlanTied=true; }
     else if(benefitB > benefitA){ selectedPlan='B'; }
     else { selectedPlan='A'; }
-    var fits=(selectedPlan==='A' ? a.fits : b.fits) || 0;
-    return { selectedPlan:selectedPlan, selectedPlanTied:selectedPlanTied, selectedQuantity:Math.floor(fits) };
+    var fits=(selectedPlan==='A' ? fitsA : fitsB);
+    return { selectedPlan:selectedPlan, selectedPlanTied:selectedPlanTied, selectedQuantity:fits, fitsA:fitsA, fitsB:fitsB };
   }
 
+  // Shows the auto-suggested plan (used to pre-select the stockLocSelect
+  // dropdown) but the actual destination sent at stock-in time comes from
+  // whatever the user has selected in that dropdown -- see its 'change'
+  // handler and the stockInBtn click handler below, which both read from
+  // pendingTrace.selectedPlan rather than recomputing it.
   function renderSimplifiedPlanReadout(simplified){
     var el=document.getElementById('simplifiedPlanReadout');
+    var select=document.getElementById('stockLocSelect');
     if(!el) return;
-    if(simplified.selectedQuantity===0){
+    if(simplified.fitsA===0 && simplified.fitsB===0){
       el.textContent='本次無法生產完整 A 或 B，未入庫';
+      if(select){ select.style.display='none'; }
       return;
     }
     var sloc=simplified.selectedPlan==='A' ? 'SBED' : 'CUBE';
-    var text='本次選定：'+simplified.selectedPlan+'，數量 '+simplified.selectedQuantity+' 個，將送往 '+sloc;
+    var text='建議選定：'+simplified.selectedPlan+'，數量 '+simplified.selectedQuantity+' 個，將送往 '+sloc;
     if(simplified.selectedPlanTied){ text+='（效益打平，預設選 A）'; }
     el.textContent=text;
+    if(select){
+      select.style.display='';
+      var optA=select.querySelector('option[value="A"]');
+      var optB=select.querySelector('option[value="B"]');
+      if(optA){ optA.textContent='方案 A → SBED（'+simplified.fitsA+' 個）'; optA.disabled=(simplified.fitsA===0); }
+      if(optB){ optB.textContent='方案 B → CUBE（'+simplified.fitsB+' 個）'; optB.disabled=(simplified.fitsB===0); }
+      select.value=simplified.selectedPlan;
+    }
   }
 
   function renderInventory(){
@@ -590,6 +613,8 @@
     document.getElementById('productAreaReadout').textContent='—';
     document.getElementById('productFitReadout').textContent='—';
     document.getElementById('simplifiedPlanReadout').textContent='—';
+    document.getElementById('stockLocSelect').value='A';
+    document.getElementById('stockLocSelect').style.display='none';
     document.getElementById('stockInBtn').disabled=false;
   }
 
@@ -838,16 +863,20 @@
           candidateOptions:buildCandidateOptionsFromNesting(data.nesting),
           bindingStatus:'UNBOUND',
           selectedPlan:simplified.selectedPlan, selectedPlanTied:simplified.selectedPlanTied,
-          selectedQuantity:simplified.selectedQuantity
+          selectedQuantity:simplified.selectedQuantity,
+          fitsA:simplified.fitsA, fitsB:simplified.fitsB
         }, meta);
-        if(simplified.selectedQuantity===0){
-          // Treated as not qualifying: block stock-in/export entirely, even
-          // though the old candidate_options-based qualifies flag is true.
+        if(simplified.fitsA===0 && simplified.fitsB===0){
+          // Neither plan can produce a full unit: block stock-in/export
+          // entirely, even though the old candidate_options-based qualifies
+          // flag is true. If only one of the two plans is at 0, stock-in
+          // stays open -- the zero-quantity option is just disabled in the
+          // stockLocSelect dropdown above.
           pendingTrace=null;
           stockInBtn.disabled=true;
           log.textContent='本次無法生產完整 A 或 B，未入庫。';
         } else {
-          log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 達門檻且可排入標準品，請選擇材質後按「入庫」。';
+          log.textContent=meta.sourceLabel+'：成品面積 '+data.product_area_cm2+' cm²，原紙板（'+sheet.name+'）可排 '+data.product_fit_count+' 個，餘料面積 '+data.area_cm2+' cm² — 達門檻且可排入標準品，請選擇材質與入庫方案後按「入庫」。';
         }
       } else {
         pendingTrace=null;
@@ -989,6 +1018,23 @@
     drawPhotoCanvas();
   }
 
+  // Lets the user override the auto-suggested plan (SBED vs CUBE) before
+  // committing stock-in. Recomputes selectedQuantity from the fitsA/fitsB
+  // already stored on pendingTrace (from the same nesting result) rather
+  // than re-calling the backend, since neither plan's fit count changes
+  // when the user just changes which one they want to send to.
+  document.getElementById('stockLocSelect').addEventListener('change', function(){
+    if(!pendingTrace) return;
+    var plan=this.value;
+    var qty=(plan==='A' ? pendingTrace.fitsA : pendingTrace.fitsB) || 0;
+    pendingTrace.selectedPlan=plan;
+    pendingTrace.selectedPlanTied=false;
+    pendingTrace.selectedQuantity=qty;
+    var sloc=plan==='A' ? 'SBED' : 'CUBE';
+    document.getElementById('simplifiedPlanReadout').textContent=
+      '本次選定：'+plan+'，數量 '+qty+' 個，將送往 '+sloc+'（手動選擇）';
+  });
+
   document.getElementById('stockInBtn').addEventListener('click', function(){
     if(!pendingTrace || !pendingTrace.polygonCm){
       document.getElementById('log').textContent='目前沒有可入庫的評估結果（可能後端未連線）。';
@@ -1036,6 +1082,8 @@
       document.getElementById('productAreaReadout').textContent='—';
       document.getElementById('productFitReadout').textContent='—';
       document.getElementById('simplifiedPlanReadout').textContent='—';
+      document.getElementById('stockLocSelect').value='A';
+      document.getElementById('stockLocSelect').style.display='none';
       renderInventory();
     }).catch(function(err){
       log.textContent='無法連線後端寫入資料庫（'+err.message+'）。';

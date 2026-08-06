@@ -66,25 +66,35 @@ FRONTEND_HTML_PATH = (
 )
 
 # --- SAP ICF integration (ZAI_DIM endpoint) ---
-# Never hardcode the URL or credentials directly in source -- test vs.
-# production endpoints and the account differ per environment. For local/dev
-# runs (not frozen) these still only come from env vars, matching
-# start_server.ps1. For the packaged exe, they're read from an external
-# sap_config.json sitting next to the exe (see _load_sap_config below):
-# still plaintext on disk and extractable from the exe with tools like
-# pyinstxtractor, but at least not compiled into the binary and swappable
-# without a rebuild if the account/password ever needs to change.
+# For local/dev runs (not frozen) these only come from env vars, matching
+# start_server.ps1. For the packaged customer exe, an external sap_config.json
+# sitting next to the exe still wins if present (swappable without a rebuild),
+# but falls back to _HARDCODED_SAP_DEFAULTS below so the exe works out of the
+# box with zero setup -- an explicit 2026-08-06 request so customers don't
+# have to create sap_config.json themselves. Trade-off accepted knowingly:
+# these values are plaintext in the exe and extractable with tools like
+# pyinstxtractor. Do NOT let this hardcoded block reach the Render deployment
+# path -- it only ever applies when IS_FROZEN, which Render's non-frozen
+# `gunicorn app:app` run never sets.
+_HARDCODED_SAP_DEFAULTS = {
+    "SAP_ICF_URL": "https://ncus4ap.mgt.ncu.edu.tw:44320/sap/bc/zai_dim?sap-client=700",
+    "SAP_ICF_USERNAME": "CERP16",
+    "SAP_ICF_PASSWORD": "S101517s",
+    "SAP_ICF_VERIFY_SSL": "false",
+}
+
+
 def _load_sap_config():
     if not IS_FROZEN:
         return {}
     config_path = os.path.join(EXTERNAL_DIR, "sap_config.json")
-    if not os.path.exists(config_path):
-        return {}
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            pass
+    return dict(_HARDCODED_SAP_DEFAULTS)
 
 
 _sap_config = _load_sap_config()
